@@ -11,10 +11,16 @@ import (
 
 type Coordinator struct {
 	// Your definitions here.
-	nReduce    int
-	files      []string
-	filesIsMap []bool
-	lock       sync.Mutex
+	nReduce       int
+	isReduce      []bool
+	isReduceDone  []bool
+	reduceDoneNum int
+	mapDoneNum    int
+	files         []string
+	isMap         []bool
+	isMapDone     []bool
+	requestLock   sync.Mutex
+	doneLock      sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -29,22 +35,79 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
-func (c *Coordinator) callForJob(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
+//请求task
+func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) error {
+	mapNum := c.atomicMap()
+	if mapNum != -1 {
+		reply.taskType = 0
+		reply.taskNumber = mapNum
+		return nil
+	}
+
+	//所有的map已经完成
+	if c.mapDoneNum == len(c.files) {
+		//请求reduce
+		reduceNum := c.atomicReduce()
+		if reduceNum != -1 {
+			reply.taskType = 1
+			reply.taskNumber = reduceNum
+			return nil
+		}
+	}
+
+	if c.reduceDoneNum == c.nReduce { //reduce全部做完
+		reply.taskType = 3
+		return nil
+	} else {
+		reply.taskType = 2 //reduce还没做完，reduce全都开始做了
+		return nil
+	}
+}
+
+//task完成
+func (c *Coordinator) taskDone(args *DoneForTaskArgs, reply *CallForTaskReply) error {
+	//map done
+	if args.taskType == 0 {
+		c.isMapDone[args.taskNumber] = true
+		c.doneLock.Lock()
+		c.mapDoneNum++
+		c.doneLock.Unlock()
+	} else if args.taskType == 1 { //reduce done
+		c.isReduceDone[args.taskNumber] = true
+		c.doneLock.Lock()
+		c.reduceDoneNum++
+		c.doneLock.Unlock()
+	}
 	return nil
 }
 
-func (c *Coordinator) atomicfilesIsMap() int {
+//返回文件的编号,如果返回-1则map全部开始
+func (c *Coordinator) atomicMap() int {
 	tmp := -1
-	c.lock.Lock()
-	for i := 0; i < len(c.filesIsMap); i++ {
-		if !c.filesIsMap[i] {
-			c.filesIsMap[i] = true
+	c.requestLock.Lock()
+	for i := 0; i < len(c.isMap); i++ {
+		if !c.isMap[i] {
+			c.isMap[i] = true
 			tmp = i
 			break
 		}
 	}
-	c.lock.Unlock()
+	c.requestLock.Unlock()
+	return tmp
+}
+
+//返回reduce的编号,如果返回-1则reduce全部开始
+func (c *Coordinator) atomicReduce() int {
+	tmp := -1
+	c.requestLock.Lock()
+	for i := 0; i < len(c.isReduce); i++ {
+		if !c.isReduce[i] {
+			c.isReduce[i] = true
+			tmp = i
+			break
+		}
+	}
+	c.requestLock.Unlock()
 	return tmp
 }
 
@@ -69,11 +132,7 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	ret := false
-
-	// Your code here.
-
-	return ret
+	return c.nReduce == c.reduceDoneNum
 }
 
 //
@@ -84,7 +143,17 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 
-	// Your code here.
+	// Your code here. init
+	for i := 0; i < len(files); i++ {
+		c.isMapDone = append(c.isMapDone, false)
+		c.isMap = append(c.isMap, false)
+	}
+	for i := 0; i < nReduce; i++ {
+		c.isReduceDone = append(c.isReduceDone, false)
+		c.isReduce = append(c.isReduce, false)
+	}
+	c.reduceDoneNum = 0
+	c.mapDoneNum = 0
 	c.nReduce = nReduce
 	c.files = files
 
