@@ -77,7 +77,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			workerReduce(reducef, reply.TaskNumber)
 			//finish
 			callTaskDone(reply.TaskType, reply.TaskNumber)
-		} else if reply.TaskType == 3 { //全部完成了
+		} else if reply.TaskType == 3 || reply.TaskType == 4 { //全部完成了,或者master已经关闭
 			break
 		} else {
 			//其他状态继续不断请求task
