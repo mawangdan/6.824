@@ -1,10 +1,15 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
+import (
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+)
 
+var nReduce int
 
 //
 // Map functions return a slice of KeyValue.
@@ -12,6 +17,19 @@ import "hash/fnv"
 type KeyValue struct {
 	Key   string
 	Value string
+}
+type KeyValues []KeyValue
+
+func (s KeyValues) Len() int {
+	return len(s)
+}
+
+func (s KeyValues) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s KeyValues) Less(i, j int) bool {
+	return s[i].Key < s[j].Key
 }
 
 //
@@ -24,18 +42,71 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
+	nReduce = initCall()
 	// Your worker implementation here.
+	for true {
+		// send the Example RPC to the coordinator.
+		reply := workerCallForTask()
+		if reply.taskType == 0 {
+			//do map
+		} else if reply.taskType == 1 {
+			//do reduce
+		} else if reply.taskType == 3 {
+			break
+		}
+	}
+}
 
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+//获得nReduce
+func initCall() int {
+	args := ExampleArgs{}
+	reply := ExampleReply{}
+	ok := call("Coordinator.initCall", &args, &reply)
+	if !ok {
+		fmt.Printf("call failed!\n")
+	}
+	return reply.Y
+}
 
+func workerCallForTask() CallForTaskReply {
+	args := ExampleArgs{}
+	reply := CallForTaskReply{}
+	ok := call("Coordinator.callForTask", &args, &reply)
+	if !ok {
+		fmt.Printf("call failed!\n")
+	}
+	return reply
+}
+
+func workerMap(mapf func(string, string) []KeyValue, filename string) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kvs := mapf(filename, string(content))
+	reduceKvs := [][]KeyValue{}
+	for i := 0; i < nReduce; i++ {
+		reduceKvs = append(reduceKvs, []KeyValue{})
+	}
+	//每个kv丢到合适的reduce桶
+	for _, v := range kvs {
+		reduceY := ihash(v.Key) % nReduce
+		reduceKvs[reduceY] = append(reduceKvs[reduceY], KeyValue{v.Key, v.Value})
+	}
+	//reduceKvs[Y]输出为mr-X-Y
+	for i := 0; i < nReduce; i++ {
+	}
 }
 
 //
