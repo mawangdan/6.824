@@ -70,7 +70,6 @@ func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 
 //请求task
 func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) error {
-	log.Printf("CallForTask")
 	mapNum := c.atomicMap()
 	if mapNum != -1 { //分配maptask成功
 		reply.TaskType = 0
@@ -169,6 +168,8 @@ func (c *Coordinator) Done() bool {
 	c.reduceLock.Unlock()
 	if ret {
 		log.Printf("-------------------任务结束------------------")
+		initLog("./workerlog.log", "master")
+		log.Printf("-------------------任务结束------------------")
 	}
 	return ret
 }
@@ -191,6 +192,8 @@ func initLog(file string, perfix string) {
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
+	initLog("./workerlog.log", "master")
+	log.Printf("-------------------任务开始----------------------------")
 	initLog("./masterlog.log", "master")
 	log.Printf("-------------------任务开始----------------------------")
 	// Your code here. init
