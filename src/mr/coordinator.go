@@ -163,11 +163,13 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	log.Printf("-------------------任务结束------------------")
 	ret := false
 	c.reduceLock.Lock()
 	ret = c.nReduce == c.reduceDoneNum
 	c.reduceLock.Unlock()
+	if ret {
+		log.Printf("-------------------任务结束------------------")
+	}
 	return ret
 }
 
