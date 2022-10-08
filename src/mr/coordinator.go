@@ -163,6 +163,7 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
+	log.Printf("-------------------任务结束------------------")
 	ret := false
 	c.reduceLock.Lock()
 	ret = c.nReduce == c.reduceDoneNum
@@ -189,6 +190,7 @@ func initLog(file string, perfix string) {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 	initLog("./masterlog.log", "master")
+	log.Printf("-------------------任务开始----------------------------")
 	// Your code here. init
 	for i := 0; i < len(files); i++ {
 		c.mapTask = append(c.mapTask, MapTask{idle})

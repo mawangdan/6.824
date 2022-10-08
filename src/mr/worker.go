@@ -63,16 +63,16 @@ func Worker(mapf func(string, string) []KeyValue,
 	workerNumber = initReply.WorkerNumber
 	// Your worker implementation here.
 	for true {
-		log.Printf("loop start")
 		// send the Example RPC to the coordinator.
 		reply := workerCallForTask()
 		if reply.TaskType == 0 {
-			log.Printf("get task type%d num %d filename %s", reply.TaskType, reply.TaskNumber, reply.Filename)
+			log.Printf("get Map num %d filename %s", reply.TaskNumber, reply.Filename)
 			//do map
 			workerMap(mapf, reply.Filename, reply.TaskNumber)
 			//finish
 			callTaskDone(reply.TaskType, reply.TaskNumber)
 		} else if reply.TaskType == 1 {
+			log.Printf("get Reduce num %d filename %s", reply.TaskNumber, reply.Filename)
 			//do reduce
 			workerReduce(reducef, reply.TaskNumber)
 			//finish
