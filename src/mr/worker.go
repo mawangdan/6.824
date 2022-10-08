@@ -202,8 +202,15 @@ func workerReduce(reducef func(string, []string) string, taskNumber int) {
 		fmt.Fprintf(ofile, "%v %v\n", v.Key, v.Value)
 	}
 	ofile.Close()
-	//写完后删除中间文件
 
+	//写完后删除中间文件
+	for i := 0; i < nMap; i++ {
+		jsonFilename := fmt.Sprintf("mr-%d-%d.json", i, taskNumber)
+		err := os.Remove(jsonFilename)
+		if err != nil {
+			log.Printf(jsonFilename + "删除失败")
+		}
+	}
 }
 
 //
