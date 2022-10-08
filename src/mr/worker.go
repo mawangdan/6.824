@@ -100,6 +100,18 @@ func workerCallForTask() CallForTaskReply {
 	return reply
 }
 
+//请求结束
+func callTaskDone(taskType int, taskNumber int) {
+	args := DoneForTaskArgs{}
+	args.taskType = taskType
+	args.taskNumber = taskNumber
+	reply := ExampleReply{}
+	ok := call("Coordinator.taskDone", &args, &reply)
+	if !ok {
+		fmt.Printf("call failed!\n")
+	}
+}
+
 //执行map
 func workerMap(mapf func(string, string) []KeyValue, filename string, taskNumber int) {
 	file, err := os.Open(filename)
@@ -186,17 +198,6 @@ func workerReduce(reducef func(string, []string) string, taskNumber int) {
 		fmt.Fprintf(ofile, "%v %v\n", k, v)
 	}
 	ofile.Close()
-}
-
-func callTaskDone(taskType int, taskNumber int) {
-	args := DoneForTaskArgs{}
-	args.taskType = taskType
-	args.taskNumber = taskNumber
-	reply := ExampleReply{}
-	ok := call("Coordinator.taskDone", &args, &reply)
-	if !ok {
-		fmt.Printf("call failed!\n")
-	}
 }
 
 //
