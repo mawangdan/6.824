@@ -110,7 +110,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		reply.TaskType = 0
 		reply.TaskNumber = mapNum
 		reply.Filename = c.files[mapNum]
-		c.setTimer(reply.TaskType, reply.TaskNumber)
+		//c.setTimer(reply.TaskType, reply.TaskNumber)
 	} else { //分配不成功，全部分配完了
 
 		//所有的map已经完成,reduce还没完成
@@ -121,12 +121,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 				reply.TaskType = 1
 				reply.TaskNumber = reduceNum
 				log.Printf("Reduce %d 被分配", reply.TaskNumber)
-				c.setTimer(reply.TaskType, reply.TaskNumber)
-				if reply.TaskNumber == 6 { //
-					for i := 0; i < nReduce; i++ {
-						log.Printf("%d %d", i, c.reduceTask[i].state)
-					}
-				}
+				//c.setTimer(reply.TaskType, reply.TaskNumber)
 			} else { //否则reduce全部被分配,保持请求
 				reply.TaskType = 2
 			}
