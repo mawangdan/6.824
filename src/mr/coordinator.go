@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 	"os"
 	"sync"
+	"time"
 )
 
 //task 状态
@@ -18,10 +19,12 @@ const (
 
 type MapTask struct {
 	state int //0 idle,1 in-progress,2 completed
+	C     <-chan time.Time
 }
 
 type ReduceTask struct {
 	state int //0 idle,1 in-progress,2 completed
+	C     <-chan time.Time
 }
 
 type WorkerEntity struct {
@@ -55,6 +58,38 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
+func (c *Coordinator) setTimer(taskType int, taskNumber int) {
+	if taskType == 0 {
+		c.mapLock.Lock()
+		c.mapTask[taskNumber].C = time.After(10 * time.Second)
+		c.mapLock.Unlock()
+		go func() {
+			select {
+			case <-c.mapTask[taskNumber].C: //10s到
+				c.mapLock.Lock()
+				if c.mapTask[taskNumber].state == inProgress { //还没完成
+					c.mapTask[taskNumber].state = idle //重新分配
+				}
+				c.mapLock.Lock()
+			}
+		}()
+	} else if taskType == 1 {
+		c.reduceLock.Lock()
+		c.reduceTask[taskNumber].C = time.After(10 * time.Second)
+		c.reduceLock.Unlock()
+		go func() {
+			select {
+			case <-c.reduceTask[taskNumber].C: //10s到
+				c.reduceLock.Lock()
+				if c.reduceTask[taskNumber].state == inProgress { //还没完成
+					c.reduceTask[taskNumber].state = idle //重新分配
+				}
+				c.reduceLock.Lock()
+			}
+		}()
+	}
+}
+
 //初始化worker 的reduce数量
 func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 	reply.NReduce = c.nReduce
@@ -75,6 +110,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		reply.TaskType = 0
 		reply.TaskNumber = mapNum
 		reply.Filename = c.files[mapNum]
+		c.setTimer(reply.TaskType, reply.TaskNumber)
 	} else { //分配不成功，全部分配完了
 
 		//所有的map已经完成,reduce还没完成
@@ -84,6 +120,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 			if reduceNum != -1 { //分配reducetask成功
 				reply.TaskType = 1
 				reply.TaskNumber = reduceNum
+				c.setTimer(reply.TaskType, reply.TaskNumber)
 			} else { //否则reduce全部被分配,保持请求
 				reply.TaskType = 2
 			}
@@ -101,13 +138,13 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 func (c *Coordinator) TaskDone(args *DoneForTaskArgs, reply *ExampleReply) error {
 	//map done
 	if args.TaskType == 0 {
-		c.mapTask[args.TaskNumber].state = completed
 		c.mapLock.Lock()
+		c.mapTask[args.TaskNumber].state = completed
 		c.mapDoneNum++
 		c.mapLock.Unlock()
 	} else if args.TaskType == 1 { //reduce done
-		c.reduceTask[args.TaskNumber].state = completed
 		c.reduceLock.Lock()
+		c.reduceTask[args.TaskNumber].state = completed
 		c.reduceDoneNum++
 		c.reduceLock.Unlock()
 	}
