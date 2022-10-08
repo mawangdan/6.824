@@ -86,7 +86,7 @@ func initCall() InitReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	log.Fatal("init finish")
+	log.Fatalf("init finish nmap %d nreduce %d", reply.NMap, reply.NReduce)
 	return reply
 }
 
