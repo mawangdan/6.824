@@ -57,7 +57,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	nReduce = initReply.NReduce
 	// Your worker implementation here.
 	for true {
-		log.Fatal("loop start")
+		log.Printf("loop start")
 		// send the Example RPC to the coordinator.
 		reply := workerCallForTask()
 		if reply.TaskType == 0 {
@@ -87,7 +87,7 @@ func initCall() InitReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	log.Fatalf("init finish nmap %d nreduce %d", reply.NMap, reply.NReduce)
+	log.Printf("init finish nmap %d nreduce %d", reply.NMap, reply.NReduce)
 	return reply
 }
 
@@ -99,7 +99,7 @@ func workerCallForTask() CallForTaskReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	log.Fatalf("get task type%d num %d filename %s", reply.TaskType, reply.TaskNumber, reply.Filename)
+	log.Printf("get task type%d num %d filename %s", reply.TaskType, reply.TaskNumber, reply.Filename)
 	return reply
 }
 
@@ -113,7 +113,7 @@ func callTaskDone(taskType int, taskNumber int) {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	log.Fatalf("task done type %d num %d", taskType, taskNumber)
+	log.Printf("task done type %d num %d", taskType, taskNumber)
 }
 
 //执行map

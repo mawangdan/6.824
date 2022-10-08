@@ -58,7 +58,7 @@ func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 
 //请求task
 func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) error {
-	log.Fatal("CallForTask")
+	log.Printf("CallForTask")
 	mapNum := c.atomicMap()
 	if mapNum != -1 { //分配maptask成功
 		reply.TaskType = 0
