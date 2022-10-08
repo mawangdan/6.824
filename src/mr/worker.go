@@ -147,8 +147,8 @@ func workerMap(mapf func(string, string) []KeyValue, filename string, taskNumber
 		sort.Sort(KeyValues(reduceKvs[i]))
 
 		jsonFilename := fmt.Sprintf("mr-%d-%d.json", taskNumber, i)
-		// 创建文件
-		filePtr, err := os.Create(jsonFilename)
+		// 覆盖创建文件,防止前面死亡的机子有留下文件
+		filePtr, err := os.OpenFile(jsonFilename, os.O_CREATE|os.O_RDWR, 0666)
 		if err != nil {
 			fmt.Println("文件创建失败", err.Error())
 			return
