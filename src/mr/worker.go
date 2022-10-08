@@ -9,9 +9,11 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
+	"time"
 )
 
 var nReduce int
+var nMap int
 
 //
 // Map functions return a slice of KeyValue.
@@ -50,7 +52,9 @@ func ihash(key string) int {
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
-	nReduce = initCall()
+	initReply := initCall()
+	nMap = initReply.nMap
+	nReduce = initReply.nReduce
 	// Your worker implementation here.
 	for true {
 		// send the Example RPC to the coordinator.
@@ -58,24 +62,31 @@ func Worker(mapf func(string, string) []KeyValue,
 		if reply.taskType == 0 {
 			//do map
 			workerMap(mapf, reply.filename, reply.taskNumber)
+			//finish
+			callTaskDone(reply.taskType, reply.taskNumber)
 		} else if reply.taskType == 1 {
 			//do reduce
-
+			workerReduce(reducef, reply.taskNumber)
+			//finish
+			callTaskDone(reply.taskType, reply.taskNumber)
 		} else if reply.taskType == 3 { //全部完成了
 			break
+		} else {
+			//其他状态继续不断请求task
+			time.Sleep(time.Second)
 		}
 	}
 }
 
-//获得nReduce
-func initCall() int {
+//获得nReduce,nMap
+func initCall() InitReply {
 	args := ExampleArgs{}
-	reply := ExampleReply{}
+	reply := InitReply{}
 	ok := call("Coordinator.initCall", &args, &reply)
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	return reply.Y
+	return reply
 }
 
 //请求一个task
@@ -130,32 +141,60 @@ func workerMap(mapf func(string, string) []KeyValue, filename string, taskNumber
 }
 
 //执行reduce
+func workerReduce(reducef func(string, []string) string, taskNumber int) {
+	kva := []KeyValue{}
+	for i := 0; i < nMap; i++ {
+		jsonFilename := fmt.Sprintf("mr-%d-%d.json", i, taskNumber)
 
-//
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
+		file, err := os.Open(jsonFilename)
+		if err != nil {
+			fmt.Println("json文件读取失败", err.Error())
+			return
+		}
 
-	// declare an argument structure.
-	args := ExampleArgs{}
+		dec := json.NewDecoder(file)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kva = append(kva, kv)
+		}
+		file.Close()
+	}
 
-	// fill in the argument(s).
-	args.X = 99
+	//归并key
+	//这里其实可以套用归并排序,如果循环中组合成map再reduce的策略,
+	//但是空间复杂度可能远大于O(K+V),如果循环中进行reduce空间复杂度是O(V),双指针
+	sort.Sort(KeyValues(kva))
+	var reduceResult KeyValues
+	for i := 0; i < len(kva); {
+		j := i
+		var sa []string
+		for ; j < len(kva) && kva[i].Key == kva[j].Key; j++ {
+			sa = append(sa, kva[j].Value)
+		}
+		s := reducef(kva[i].Key, sa)
+		reduceResult = append(reduceResult, KeyValue{kva[i].Key, s})
+		i = j
+	}
 
-	// declare a reply structure.
+	//写入mr-out-Y
+	outFilename := fmt.Sprintf("mr-out-%d", taskNumber)
+	ofile, _ := os.Create(outFilename)
+	for k, v := range reduceResult {
+		fmt.Fprintf(ofile, "%v %v\n", k, v)
+	}
+	ofile.Close()
+}
+
+func callTaskDone(taskType int, taskNumber int) {
+	args := DoneForTaskArgs{}
+	args.taskType = taskType
+	args.taskNumber = taskNumber
 	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
-	} else {
+	ok := call("Coordinator.taskDone", &args, &reply)
+	if !ok {
 		fmt.Printf("call failed!\n")
 	}
 }

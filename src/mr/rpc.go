@@ -24,12 +24,13 @@ type ExampleReply struct {
 	Y int
 }
 
-type CallForJobArgs struct {
-	args int
+type InitReply struct {
+	nReduce int
+	nMap    int
 }
 
 type CallForTaskReply struct {
-	taskType   int //0 for map,1 for Reduce,2 for Map DONE,3 for ALL DONE
+	taskType   int //0 for map,1 for Reduce,2 for keep call,3 for ALL DONE
 	taskNumber int //Map-X or Reduce-Y
 	filename   string
 }

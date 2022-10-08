@@ -27,6 +27,7 @@ type ReduceTask struct {
 type Coordinator struct {
 	// Your definitions here.
 	nReduce       int
+	nMap          int
 	reduceDoneNum int
 	mapDoneNum    int
 	mapTask       []MapTask
@@ -48,6 +49,13 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
+//初始化worker 的reduce数量
+func (c *Coordinator) initCall(args *ExampleArgs, reply *InitReply) error {
+	reply.nReduce = c.nReduce
+	reply.nMap = c.nMap
+	return nil
+}
+
 //请求task
 func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) error {
 	mapNum := c.atomicMap()
@@ -58,24 +66,20 @@ func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		return nil
 	}
 
-	//所有的map已经完成
-	if c.mapDoneNum == len(c.files) {
+	//所有的map已经完成,reduce还没完成
+	if c.mapDoneNum == c.nMap && c.reduceDoneNum < c.nReduce {
 		//请求reduce
 		reduceNum := c.atomicReduce()
 		if reduceNum != -1 { //分配reducetask成功
 			reply.taskType = 1
 			reply.taskNumber = reduceNum
-			return nil
 		}
-	}
-
-	if c.reduceDoneNum == c.nReduce { //reduce全部做完
+	} else if c.reduceDoneNum == c.nReduce { //reduce全部做完
 		reply.taskType = 3
-		return nil
 	} else {
-		reply.taskType = 2 //reduce还没做完，reduce全都开始做了
-		return nil
+		reply.taskType = 2 //保持请求
 	}
+	return nil
 }
 
 //task完成
@@ -168,7 +172,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.mapDoneNum = 0
 	c.nReduce = nReduce
 	c.files = files
-
+	c.nMap = len(files)
 	c.server()
 	return &c
 }
