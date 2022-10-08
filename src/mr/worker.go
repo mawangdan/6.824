@@ -82,7 +82,7 @@ func Worker(mapf func(string, string) []KeyValue,
 func initCall() InitReply {
 	args := ExampleArgs{}
 	reply := InitReply{}
-	ok := call("Coordinator.initCall", &args, &reply)
+	ok := call("Coordinator.InitCall", &args, &reply)
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
@@ -93,7 +93,7 @@ func initCall() InitReply {
 func workerCallForTask() CallForTaskReply {
 	args := ExampleArgs{}
 	reply := CallForTaskReply{}
-	ok := call("Coordinator.callForTask", &args, &reply)
+	ok := call("Coordinator.CallForTask", &args, &reply)
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
@@ -106,7 +106,7 @@ func callTaskDone(taskType int, taskNumber int) {
 	args.taskType = taskType
 	args.taskNumber = taskNumber
 	reply := ExampleReply{}
-	ok := call("Coordinator.taskDone", &args, &reply)
+	ok := call("Coordinator.TaskDone", &args, &reply)
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}

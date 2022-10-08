@@ -50,14 +50,14 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 }
 
 //初始化worker 的reduce数量
-func (c *Coordinator) initCall(args *ExampleArgs, reply *InitReply) error {
+func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 	reply.nReduce = c.nReduce
 	reply.nMap = c.nMap
 	return nil
 }
 
 //请求task
-func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) error {
+func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) error {
 	mapNum := c.atomicMap()
 	if mapNum != -1 { //分配maptask成功
 		reply.taskType = 0
@@ -83,7 +83,7 @@ func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) er
 }
 
 //task完成
-func (c *Coordinator) taskDone(args *DoneForTaskArgs, reply *ExampleReply) error {
+func (c *Coordinator) TaskDone(args *DoneForTaskArgs, reply *ExampleReply) error {
 	//map done
 	if args.taskType == 0 {
 		c.mapTask[args.taskNumber].state = completed
