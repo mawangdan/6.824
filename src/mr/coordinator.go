@@ -60,10 +60,10 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 
 func (c *Coordinator) setTimer(taskType int, taskNumber int) {
 	if taskType == 0 {
-		c.mapLock.Lock()
-		c.mapTask[taskNumber].C = time.After(10 * time.Second)
-		c.mapLock.Unlock()
 		go func() {
+			c.mapLock.Lock()
+			c.mapTask[taskNumber].C = time.After(10 * time.Second)
+			c.mapLock.Unlock()
 			select {
 			case <-c.mapTask[taskNumber].C: //10s到
 				c.mapLock.Lock()
@@ -74,10 +74,10 @@ func (c *Coordinator) setTimer(taskType int, taskNumber int) {
 			}
 		}()
 	} else if taskType == 1 {
-		c.reduceLock.Lock()
-		c.reduceTask[taskNumber].C = time.After(10 * time.Second)
-		c.reduceLock.Unlock()
 		go func() {
+			c.reduceLock.Lock()
+			c.reduceTask[taskNumber].C = time.After(10 * time.Second)
+			c.reduceLock.Unlock()
 			select {
 			case <-c.reduceTask[taskNumber].C: //10s到
 				c.reduceLock.Lock()
@@ -125,11 +125,10 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 				reply.TaskType = 2
 			}
 		} else if c.reduceDoneNum == c.nReduce { //所有的map,reduce已经完成
-			reply.TaskType = 3
+			reply.TaskType = 3 //告知可以退出
 		} else {
 			reply.TaskType = 2 //map全部被分配,保持请求
 		}
-
 	}
 	return nil
 }
@@ -207,6 +206,7 @@ func (c *Coordinator) Done() bool {
 	ret = c.nReduce == c.reduceDoneNum
 	c.reduceLock.Unlock()
 	if ret {
+		time.Sleep(time.Second * 2)
 		log.Printf("-------------------任务结束------------------")
 		initLog("./workerlog.log", "master")
 		log.Printf("-------------------任务结束------------------")
