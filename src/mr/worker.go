@@ -92,7 +92,7 @@ func initCall() InitReply {
 	reply := InitReply{}
 	ok := call("Coordinator.InitCall", &args, &reply)
 	if !ok {
-		fmt.Printf("call Coordinator.InitCall failed!\n")
+		log.Printf("call Coordinator.InitCall failed!\n")
 	}
 	return reply
 }
@@ -103,7 +103,7 @@ func workerCallForTask() CallForTaskReply {
 	reply := CallForTaskReply{}
 	ok := call("Coordinator.CallForTask", &args, &reply)
 	if !ok {
-		fmt.Printf("call Coordinator.CallForTask failed!\n")
+		log.Printf("call Coordinator.CallForTask failed!")
 		reply.TaskType = 4
 		reply.Filename = "CallForTask failed"
 	}
@@ -118,9 +118,10 @@ func callTaskDone(taskType int, taskNumber int) {
 	reply := ExampleReply{}
 	ok := call("Coordinator.TaskDone", &args, &reply)
 	if !ok {
-		fmt.Printf("call Coordinator.TaskDone failed!\n")
+		log.Printf("call Coordinator.TaskDone failed!")
+	} else {
+		log.Printf("task done type %d num %d", taskType, taskNumber)
 	}
-	log.Printf("task done type %d num %d", taskType, taskNumber)
 }
 
 //执行map
@@ -152,7 +153,7 @@ func workerMap(mapf func(string, string) []KeyValue, filename string, taskNumber
 		// 覆盖创建文件,防止前面死亡的机子有留下文件
 		filePtr, err := os.OpenFile(jsonFilename, os.O_CREATE|os.O_RDWR, 0666)
 		if err != nil {
-			fmt.Println("文件创建失败", err.Error())
+			log.Printf("文件创建失败 %v", err.Error())
 			return
 		}
 		enc := json.NewEncoder(filePtr)
@@ -171,7 +172,7 @@ func workerReduce(reducef func(string, []string) string, taskNumber int) {
 
 		file, err := os.Open(jsonFilename)
 		if err != nil {
-			fmt.Println("json文件读取失败", err.Error())
+			log.Printf("json文件读取失败%v", err.Error())
 			return
 		}
 
