@@ -241,6 +241,7 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 		return true
 	}
 
-	fmt.Println(err)
+	fmt.Println(rpcname + err.Error())
+	os.Exit(1)
 	return false
 }
