@@ -9,18 +9,31 @@ import (
 	"sync"
 )
 
+//task 状态
+const (
+	idle       int = 0
+	inProgress int = 1
+	completed  int = 2
+)
+
+type MapTask struct {
+	state int //0 idle,1 in-progress,2 completed
+}
+
+type ReduceTask struct {
+	state int //0 idle,1 in-progress,2 completed
+}
+
 type Coordinator struct {
 	// Your definitions here.
 	nReduce       int
-	isReduce      []bool
-	isReduceDone  []bool
 	reduceDoneNum int
 	mapDoneNum    int
+	mapTask       []MapTask
+	reduceTask    []ReduceTask
+	mapLock       sync.Mutex
+	reduceLock    sync.Mutex
 	files         []string
-	isMap         []bool
-	isMapDone     []bool
-	requestLock   sync.Mutex
-	doneLock      sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -38,9 +51,10 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 //请求task
 func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) error {
 	mapNum := c.atomicMap()
-	if mapNum != -1 {
+	if mapNum != -1 { //分配maptask成功
 		reply.taskType = 0
 		reply.taskNumber = mapNum
+		reply.filename = c.files[mapNum]
 		return nil
 	}
 
@@ -48,7 +62,7 @@ func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) er
 	if c.mapDoneNum == len(c.files) {
 		//请求reduce
 		reduceNum := c.atomicReduce()
-		if reduceNum != -1 {
+		if reduceNum != -1 { //分配reducetask成功
 			reply.taskType = 1
 			reply.taskNumber = reduceNum
 			return nil
@@ -65,18 +79,18 @@ func (c *Coordinator) callForTask(args *ExampleArgs, reply *CallForTaskReply) er
 }
 
 //task完成
-func (c *Coordinator) taskDone(args *DoneForTaskArgs, reply *CallForTaskReply) error {
+func (c *Coordinator) taskDone(args *DoneForTaskArgs, reply *ExampleReply) error {
 	//map done
 	if args.taskType == 0 {
-		c.isMapDone[args.taskNumber] = true
-		c.doneLock.Lock()
+		c.mapTask[args.taskNumber].state = completed
+		c.mapLock.Lock()
 		c.mapDoneNum++
-		c.doneLock.Unlock()
+		c.mapLock.Unlock()
 	} else if args.taskType == 1 { //reduce done
-		c.isReduceDone[args.taskNumber] = true
-		c.doneLock.Lock()
+		c.reduceTask[args.taskNumber].state = completed
+		c.reduceLock.Lock()
 		c.reduceDoneNum++
-		c.doneLock.Unlock()
+		c.reduceLock.Unlock()
 	}
 	return nil
 }
@@ -84,30 +98,30 @@ func (c *Coordinator) taskDone(args *DoneForTaskArgs, reply *CallForTaskReply) e
 //返回文件的编号,如果返回-1则map全部开始
 func (c *Coordinator) atomicMap() int {
 	tmp := -1
-	c.requestLock.Lock()
-	for i := 0; i < len(c.isMap); i++ {
-		if !c.isMap[i] {
-			c.isMap[i] = true
+	c.mapLock.Lock()
+	for i := 0; i < len(c.mapTask); i++ {
+		if c.mapTask[i].state == idle {
+			c.mapTask[i].state = inProgress
 			tmp = i
 			break
 		}
 	}
-	c.requestLock.Unlock()
+	c.mapLock.Unlock()
 	return tmp
 }
 
 //返回reduce的编号,如果返回-1则reduce全部开始
 func (c *Coordinator) atomicReduce() int {
 	tmp := -1
-	c.requestLock.Lock()
-	for i := 0; i < len(c.isReduce); i++ {
-		if !c.isReduce[i] {
-			c.isReduce[i] = true
+	c.reduceLock.Lock()
+	for i := 0; i < len(c.reduceTask); i++ {
+		if c.reduceTask[i].state == idle {
+			c.reduceTask[i].state = inProgress
 			tmp = i
 			break
 		}
 	}
-	c.requestLock.Unlock()
+	c.reduceLock.Unlock()
 	return tmp
 }
 
@@ -145,12 +159,10 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	// Your code here. init
 	for i := 0; i < len(files); i++ {
-		c.isMapDone = append(c.isMapDone, false)
-		c.isMap = append(c.isMap, false)
+		c.mapTask = append(c.mapTask, MapTask{idle})
 	}
 	for i := 0; i < nReduce; i++ {
-		c.isReduceDone = append(c.isReduceDone, false)
-		c.isReduce = append(c.isReduce, false)
+		c.reduceTask = append(c.reduceTask, ReduceTask{idle})
 	}
 	c.reduceDoneNum = 0
 	c.mapDoneNum = 0
