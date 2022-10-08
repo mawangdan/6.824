@@ -206,7 +206,6 @@ func (c *Coordinator) Done() bool {
 	ret = c.nReduce == c.reduceDoneNum
 	c.reduceLock.Unlock()
 	if ret {
-		time.Sleep(time.Second * 2)
 		log.Printf("-------------------任务结束------------------")
 		initLog("./workerlog.log", "master")
 		log.Printf("-------------------任务结束------------------")

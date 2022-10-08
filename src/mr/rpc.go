@@ -31,7 +31,7 @@ type InitReply struct {
 }
 
 type CallForTaskReply struct {
-	TaskType   int //0 for map,1 for Reduce,2 for keep call,3 for ALL DONE
+	TaskType   int //0 for map,1 for Reduce,2 for keep call,3 for ALL DONE,4 for call fail
 	TaskNumber int //Map-X or Reduce-Y
 	Filename   string
 }

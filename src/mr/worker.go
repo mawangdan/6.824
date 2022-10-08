@@ -92,7 +92,7 @@ func initCall() InitReply {
 	reply := InitReply{}
 	ok := call("Coordinator.InitCall", &args, &reply)
 	if !ok {
-		fmt.Printf("call failed!\n")
+		fmt.Printf("call Coordinator.InitCall failed!\n")
 	}
 	return reply
 }
@@ -103,7 +103,9 @@ func workerCallForTask() CallForTaskReply {
 	reply := CallForTaskReply{}
 	ok := call("Coordinator.CallForTask", &args, &reply)
 	if !ok {
-		fmt.Printf("call failed!\n")
+		fmt.Printf("call Coordinator.CallForTask failed!\n")
+		reply.TaskType = 4
+		reply.Filename = "CallForTask failed"
 	}
 	return reply
 }
@@ -116,7 +118,7 @@ func callTaskDone(taskType int, taskNumber int) {
 	reply := ExampleReply{}
 	ok := call("Coordinator.TaskDone", &args, &reply)
 	if !ok {
-		fmt.Printf("call failed!\n")
+		fmt.Printf("call Coordinator.TaskDone failed!\n")
 	}
 	log.Printf("task done type %d num %d", taskType, taskNumber)
 }
