@@ -238,10 +238,10 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	log.Printf("-------------------任务开始----------------------------")
 	// Your code here. init
 	for i := 0; i < len(files); i++ {
-		c.mapTask = append(c.mapTask, MapTask{idle})
+		c.mapTask = append(c.mapTask, MapTask{idle, nil})
 	}
 	for i := 0; i < nReduce; i++ {
-		c.reduceTask = append(c.reduceTask, ReduceTask{idle})
+		c.reduceTask = append(c.reduceTask, ReduceTask{idle, nil})
 	}
 	c.reduceDoneNum = 0
 	c.mapDoneNum = 0
