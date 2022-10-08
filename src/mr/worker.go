@@ -72,7 +72,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			//finish
 			callTaskDone(reply.TaskType, reply.TaskNumber)
 		} else if reply.TaskType == 1 {
-			log.Printf("get Reduce num %d filename %s", reply.TaskNumber, reply.Filename)
+			log.Printf("get Reduce num %d", reply.TaskNumber)
 			//do reduce
 			workerReduce(reducef, reply.TaskNumber)
 			//finish
@@ -81,6 +81,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			break
 		} else {
 			//其他状态继续不断请求task
+			log.Printf("%d", reply.TaskType)
 			time.Sleep(time.Second)
 		}
 	}
