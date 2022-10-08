@@ -25,8 +25,9 @@ type ExampleReply struct {
 }
 
 type InitReply struct {
-	NReduce int
-	NMap    int
+	NReduce      int
+	NMap         int
+	WorkerNumber int
 }
 
 type CallForTaskReply struct {

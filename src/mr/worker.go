@@ -9,11 +9,13 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 )
 
 var nReduce int
 var nMap int
+var workerNumber int
 
 //
 // Map functions return a slice of KeyValue.
@@ -51,16 +53,21 @@ func ihash(key string) int {
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-
 	initReply := initCall()
+
+	initLog("./workerlog.log", "worker("+strconv.Itoa(initReply.WorkerNumber)+")")
+	log.Printf("init finish! nmap %d nreduce %d workerNO.: %d", initReply.NMap, initReply.NReduce, initReply.WorkerNumber)
+
 	nMap = initReply.NMap
 	nReduce = initReply.NReduce
+	workerNumber = initReply.WorkerNumber
 	// Your worker implementation here.
 	for true {
 		log.Printf("loop start")
 		// send the Example RPC to the coordinator.
 		reply := workerCallForTask()
 		if reply.TaskType == 0 {
+			log.Printf("get task type%d num %d filename %s", reply.TaskType, reply.TaskNumber, reply.Filename)
 			//do map
 			workerMap(mapf, reply.Filename, reply.TaskNumber)
 			//finish
@@ -87,7 +94,6 @@ func initCall() InitReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	log.Printf("init finish nmap %d nreduce %d", reply.NMap, reply.NReduce)
 	return reply
 }
 
@@ -99,7 +105,6 @@ func workerCallForTask() CallForTaskReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
-	log.Printf("get task type%d num %d filename %s", reply.TaskType, reply.TaskNumber, reply.Filename)
 	return reply
 }
 

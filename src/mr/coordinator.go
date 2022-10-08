@@ -24,14 +24,20 @@ type ReduceTask struct {
 	state int //0 idle,1 in-progress,2 completed
 }
 
+type WorkerEntity struct {
+	state int //0 online,1 offline
+}
+
 type Coordinator struct {
 	// Your definitions here.
 	nReduce       int
 	nMap          int
 	reduceDoneNum int
 	mapDoneNum    int
+	workerEntitys []WorkerEntity
 	mapTask       []MapTask
 	reduceTask    []ReduceTask
+	weLock        sync.Mutex
 	mapLock       sync.Mutex
 	reduceLock    sync.Mutex
 	files         []string
@@ -53,6 +59,12 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 	reply.NReduce = c.nReduce
 	reply.NMap = c.nMap
+
+	//assign worker num
+	c.weLock.Lock()
+	reply.WorkerNumber = len(c.workerEntitys)
+	c.workerEntitys = append(c.workerEntitys, WorkerEntity{0})
+	c.weLock.Unlock()
 	return nil
 }
 
@@ -154,6 +166,17 @@ func (c *Coordinator) Done() bool {
 	return c.nReduce == c.reduceDoneNum
 }
 
+func initLog(file string, perfix string) {
+	logFile, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766)
+	if err != nil {
+		panic(err)
+	}
+	log.SetPrefix("[" + perfix + "]")
+	log.SetOutput(logFile) // 将文件设置为log输出的文件
+	log.SetFlags(log.LstdFlags | log.Lshortfile | log.LUTC)
+	return
+}
+
 //
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
@@ -161,7 +184,7 @@ func (c *Coordinator) Done() bool {
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
-
+	initLog("./masterlog.log", "master")
 	// Your code here. init
 	for i := 0; i < len(files); i++ {
 		c.mapTask = append(c.mapTask, MapTask{idle})
