@@ -25,19 +25,19 @@ type ExampleReply struct {
 }
 
 type InitReply struct {
-	nReduce int
-	nMap    int
+	NReduce int
+	NMap    int
 }
 
 type CallForTaskReply struct {
-	taskType   int //0 for map,1 for Reduce,2 for keep call,3 for ALL DONE
-	taskNumber int //Map-X or Reduce-Y
-	filename   string
+	TaskType   int //0 for map,1 for Reduce,2 for keep call,3 for ALL DONE
+	TaskNumber int //Map-X or Reduce-Y
+	Filename   string
 }
 
 type DoneForTaskArgs struct {
-	taskType   int //0 for map,1 for Reduce
-	taskNumber int //Map-X or Reduce-Y
+	TaskType   int //0 for map,1 for Reduce
+	TaskNumber int //Map-X or Reduce-Y
 }
 
 // Add your RPC definitions here.

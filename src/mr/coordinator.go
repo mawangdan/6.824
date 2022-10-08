@@ -51,8 +51,8 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 
 //初始化worker 的reduce数量
 func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
-	reply.nReduce = c.nReduce
-	reply.nMap = c.nMap
+	reply.NReduce = c.nReduce
+	reply.NMap = c.nMap
 	return nil
 }
 
@@ -60,9 +60,9 @@ func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) error {
 	mapNum := c.atomicMap()
 	if mapNum != -1 { //分配maptask成功
-		reply.taskType = 0
-		reply.taskNumber = mapNum
-		reply.filename = c.files[mapNum]
+		reply.TaskType = 0
+		reply.TaskNumber = mapNum
+		reply.Filename = c.files[mapNum]
 		return nil
 	}
 
@@ -71,13 +71,13 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		//请求reduce
 		reduceNum := c.atomicReduce()
 		if reduceNum != -1 { //分配reducetask成功
-			reply.taskType = 1
-			reply.taskNumber = reduceNum
+			reply.TaskType = 1
+			reply.TaskNumber = reduceNum
 		}
 	} else if c.reduceDoneNum == c.nReduce { //reduce全部做完
-		reply.taskType = 3
+		reply.TaskType = 3
 	} else {
-		reply.taskType = 2 //保持请求
+		reply.TaskType = 2 //保持请求
 	}
 	return nil
 }
@@ -85,13 +85,13 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 //task完成
 func (c *Coordinator) TaskDone(args *DoneForTaskArgs, reply *ExampleReply) error {
 	//map done
-	if args.taskType == 0 {
-		c.mapTask[args.taskNumber].state = completed
+	if args.TaskType == 0 {
+		c.mapTask[args.TaskNumber].state = completed
 		c.mapLock.Lock()
 		c.mapDoneNum++
 		c.mapLock.Unlock()
-	} else if args.taskType == 1 { //reduce done
-		c.reduceTask[args.taskNumber].state = completed
+	} else if args.TaskType == 1 { //reduce done
+		c.reduceTask[args.TaskNumber].state = completed
 		c.reduceLock.Lock()
 		c.reduceDoneNum++
 		c.reduceLock.Unlock()

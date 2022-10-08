@@ -53,23 +53,23 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	initReply := initCall()
-	nMap = initReply.nMap
-	nReduce = initReply.nReduce
+	nMap = initReply.NMap
+	nReduce = initReply.NReduce
 	// Your worker implementation here.
 	for true {
 		// send the Example RPC to the coordinator.
 		reply := workerCallForTask()
-		if reply.taskType == 0 {
+		if reply.TaskType == 0 {
 			//do map
-			workerMap(mapf, reply.filename, reply.taskNumber)
+			workerMap(mapf, reply.Filename, reply.TaskNumber)
 			//finish
-			callTaskDone(reply.taskType, reply.taskNumber)
-		} else if reply.taskType == 1 {
+			callTaskDone(reply.TaskType, reply.TaskNumber)
+		} else if reply.TaskType == 1 {
 			//do reduce
-			workerReduce(reducef, reply.taskNumber)
+			workerReduce(reducef, reply.TaskNumber)
 			//finish
-			callTaskDone(reply.taskType, reply.taskNumber)
-		} else if reply.taskType == 3 { //全部完成了
+			callTaskDone(reply.TaskType, reply.TaskNumber)
+		} else if reply.TaskType == 3 { //全部完成了
 			break
 		} else {
 			//其他状态继续不断请求task
@@ -86,6 +86,7 @@ func initCall() InitReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
+	log.Fatal("init finish")
 	return reply
 }
 
@@ -103,8 +104,8 @@ func workerCallForTask() CallForTaskReply {
 //请求结束
 func callTaskDone(taskType int, taskNumber int) {
 	args := DoneForTaskArgs{}
-	args.taskType = taskType
-	args.taskNumber = taskNumber
+	args.TaskType = taskType
+	args.TaskNumber = taskNumber
 	reply := ExampleReply{}
 	ok := call("Coordinator.TaskDone", &args, &reply)
 	if !ok {
