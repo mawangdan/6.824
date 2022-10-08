@@ -100,7 +100,7 @@ func initCall() InitReply {
 
 //请求一个task
 func workerCallForTask() CallForTaskReply {
-	args := ExampleArgs{}
+	args := ExampleArgs{workerNumber}
 	reply := CallForTaskReply{}
 	ok := call("Coordinator.CallForTask", &args, &reply)
 	if !ok {
