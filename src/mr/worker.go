@@ -98,6 +98,7 @@ func workerCallForTask() CallForTaskReply {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
+	log.Fatalf("get task type%d num %d filename %s", reply.TaskType, reply.TaskNumber, reply.Filename)
 	return reply
 }
 
@@ -111,6 +112,7 @@ func callTaskDone(taskType int, taskNumber int) {
 	if !ok {
 		fmt.Printf("call failed!\n")
 	}
+	log.Fatalf("task done type %d num %d", taskType, taskNumber)
 }
 
 //执行map
