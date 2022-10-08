@@ -61,11 +61,13 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 func (c *Coordinator) setTimer(taskType int, taskNumber int) {
 	if taskType == 0 {
 		go func() {
+			log.Printf("TimerStart taskType:%d  taskNumber%d", taskType, taskNumber)
 			c.mapLock.Lock()
 			c.mapTask[taskNumber].C = time.After(10 * time.Second)
 			c.mapLock.Unlock()
 			select {
 			case <-c.mapTask[taskNumber].C: //10s到
+				log.Printf("TimerDone taskType:%d  taskNumber%d", taskType, taskNumber)
 				c.mapLock.Lock()
 				if c.mapTask[taskNumber].state == inProgress { //还没完成
 					c.mapTask[taskNumber].state = idle //重新分配
@@ -75,11 +77,13 @@ func (c *Coordinator) setTimer(taskType int, taskNumber int) {
 		}()
 	} else if taskType == 1 {
 		go func() {
+			log.Printf("TimerStart taskType:%d  taskNumber%d", taskType, taskNumber)
 			c.reduceLock.Lock()
 			c.reduceTask[taskNumber].C = time.After(10 * time.Second)
 			c.reduceLock.Unlock()
 			select {
 			case <-c.reduceTask[taskNumber].C: //10s到
+				log.Printf("TimerDone taskType:%d  taskNumber%d", taskType, taskNumber)
 				c.reduceLock.Lock()
 				if c.reduceTask[taskNumber].state == inProgress { //还没完成
 					c.reduceTask[taskNumber].state = idle //重新分配
@@ -110,7 +114,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		reply.TaskType = 0
 		reply.TaskNumber = mapNum
 		reply.Filename = c.files[mapNum]
-		//c.setTimer(reply.TaskType, reply.TaskNumber)
+		c.setTimer(reply.TaskType, reply.TaskNumber)
 	} else { //分配不成功，全部分配完了
 
 		//所有的map已经完成,reduce还没完成
@@ -121,7 +125,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 				reply.TaskType = 1
 				reply.TaskNumber = reduceNum
 				log.Printf("Reduce %d 被分配", reply.TaskNumber)
-				//c.setTimer(reply.TaskType, reply.TaskNumber)
+				c.setTimer(reply.TaskType, reply.TaskNumber)
 			} else { //否则reduce全部被分配,保持请求
 				reply.TaskType = 2
 			}
