@@ -198,10 +198,12 @@ func workerReduce(reducef func(string, []string) string, taskNumber int) {
 	//写入mr-out-Y
 	outFilename := fmt.Sprintf("mr-out-%d", taskNumber)
 	ofile, _ := os.Create(outFilename)
-	for k, v := range reduceResult {
-		fmt.Fprintf(ofile, "%v %v\n", k, v)
+	for _, v := range reduceResult {
+		fmt.Fprintf(ofile, "%v %v\n", v.Key, v.Value)
 	}
 	ofile.Close()
+	//写完后删除中间文件
+
 }
 
 //
