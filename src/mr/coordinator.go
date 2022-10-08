@@ -122,6 +122,11 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 				reply.TaskNumber = reduceNum
 				log.Printf("Reduce %d 被分配", reply.TaskNumber)
 				c.setTimer(reply.TaskType, reply.TaskNumber)
+				if reply.TaskNumber == 6 { //
+					for i := 0; i < nReduce; i++ {
+						log.Printf("%d %d", i, c.reduceTask[i].state)
+					}
+				}
 			} else { //否则reduce全部被分配,保持请求
 				reply.TaskType = 2
 			}
