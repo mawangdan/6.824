@@ -163,7 +163,11 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	return c.nReduce == c.reduceDoneNum
+	ret := false
+	c.reduceLock.Lock()
+	ret = c.nReduce == c.reduceDoneNum
+	c.reduceLock.Unlock()
+	return ret
 }
 
 func initLog(file string, perfix string) {
