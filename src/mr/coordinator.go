@@ -120,6 +120,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 			if reduceNum != -1 { //分配reducetask成功
 				reply.TaskType = 1
 				reply.TaskNumber = reduceNum
+				log.Printf("Reduce %d 被分配", reply.TaskNumber)
 				c.setTimer(reply.TaskType, reply.TaskNumber)
 			} else { //否则reduce全部被分配,保持请求
 				reply.TaskType = 2
