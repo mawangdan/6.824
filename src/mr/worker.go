@@ -57,6 +57,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	nReduce = initReply.NReduce
 	// Your worker implementation here.
 	for true {
+		log.Fatal("loop start")
 		// send the Example RPC to the coordinator.
 		reply := workerCallForTask()
 		if reply.TaskType == 0 {
