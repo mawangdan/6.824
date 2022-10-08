@@ -1,12 +1,14 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 )
 
 var nReduce int
@@ -55,9 +57,11 @@ func Worker(mapf func(string, string) []KeyValue,
 		reply := workerCallForTask()
 		if reply.taskType == 0 {
 			//do map
+			workerMap(mapf, reply.filename, reply.taskNumber)
 		} else if reply.taskType == 1 {
 			//do reduce
-		} else if reply.taskType == 3 {
+
+		} else if reply.taskType == 3 { //全部完成了
 			break
 		}
 	}
@@ -74,6 +78,7 @@ func initCall() int {
 	return reply.Y
 }
 
+//请求一个task
 func workerCallForTask() CallForTaskReply {
 	args := ExampleArgs{}
 	reply := CallForTaskReply{}
@@ -84,7 +89,8 @@ func workerCallForTask() CallForTaskReply {
 	return reply
 }
 
-func workerMap(mapf func(string, string) []KeyValue, filename string) {
+//执行map
+func workerMap(mapf func(string, string) []KeyValue, filename string, taskNumber int) {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf("cannot open %v", filename)
@@ -106,8 +112,24 @@ func workerMap(mapf func(string, string) []KeyValue, filename string) {
 	}
 	//reduceKvs[Y]输出为mr-X-Y
 	for i := 0; i < nReduce; i++ {
+		sort.Sort(KeyValues(reduceKvs[i]))
+
+		jsonFilename := fmt.Sprintf("mr-%d-%d.json", taskNumber, i)
+		// 创建文件
+		filePtr, err := os.Create(jsonFilename)
+		if err != nil {
+			fmt.Println("文件创建失败", err.Error())
+			return
+		}
+		enc := json.NewEncoder(filePtr)
+		for _, kv := range reduceKvs[i] {
+			enc.Encode(&kv)
+		}
+		filePtr.Close()
 	}
 }
+
+//执行reduce
 
 //
 // example function to show how to make an RPC call to the coordinator.

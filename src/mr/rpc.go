@@ -31,6 +31,7 @@ type CallForJobArgs struct {
 type CallForTaskReply struct {
 	taskType   int //0 for map,1 for Reduce,2 for Map DONE,3 for ALL DONE
 	taskNumber int //Map-X or Reduce-Y
+	filename   string
 }
 
 type DoneForTaskArgs struct {
