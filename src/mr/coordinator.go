@@ -115,9 +115,9 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		reply.TaskType = 0
 		reply.TaskNumber = mapNum
 		reply.Filename = c.files[mapNum]
+		log.Printf("woker(%d)请求map成功", args.X)
 		c.setTimer(reply.TaskType, reply.TaskNumber)
 	} else { //分配不成功，全部分配完了
-
 		//所有的map已经完成,reduce还没完成
 		if c.mapDoneNum == c.nMap && c.reduceDoneNum < c.nReduce {
 			//请求reduce
@@ -125,7 +125,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 			if reduceNum != -1 { //分配reducetask成功
 				reply.TaskType = 1
 				reply.TaskNumber = reduceNum
-				log.Printf("Reduce %d 被分配", reply.TaskNumber)
+				log.Printf("woker(%d)请求reduce成功", args.X)
 				c.setTimer(reply.TaskType, reply.TaskNumber)
 			} else { //否则reduce全部被分配,保持请求
 				reply.TaskType = 2
