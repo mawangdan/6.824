@@ -72,7 +72,7 @@ func (c *Coordinator) setTimer(taskType int, taskNumber int) {
 				if c.mapTask[taskNumber].state == inProgress { //还没完成
 					c.mapTask[taskNumber].state = idle //重新分配
 				}
-				c.mapLock.Lock()
+				c.mapLock.Unlock()
 			}
 		}()
 	} else if taskType == 1 {
@@ -88,7 +88,7 @@ func (c *Coordinator) setTimer(taskType int, taskNumber int) {
 				if c.reduceTask[taskNumber].state == inProgress { //还没完成
 					c.reduceTask[taskNumber].state = idle //重新分配
 				}
-				c.reduceLock.Lock()
+				c.reduceLock.Unlock()
 			}
 		}()
 	}
@@ -161,9 +161,7 @@ func (c *Coordinator) TaskDone(args *DoneForTaskArgs, reply *ExampleReply) error
 //返回文件的编号,如果返回-1则map全部开始
 func (c *Coordinator) atomicMap() int {
 	tmp := -1
-	log.Printf(" ")
 	c.mapLock.Lock()
-	log.Printf(" ")
 	for i := 0; i < len(c.mapTask); i++ {
 		if c.mapTask[i].state == idle {
 			c.mapTask[i].state = inProgress
@@ -171,9 +169,7 @@ func (c *Coordinator) atomicMap() int {
 			break
 		}
 	}
-	log.Printf(" ")
 	c.mapLock.Unlock()
-	log.Printf(" ")
 	return tmp
 }
 
