@@ -65,6 +65,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	for true {
 		// send the Example RPC to the coordinator.
 		reply := workerCallForTask()
+		log.Printf("workercall")
 		if reply.TaskType == 0 {
 			log.Printf("get Map num %d filename %s", reply.TaskNumber, reply.Filename)
 			//do map
