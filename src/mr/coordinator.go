@@ -161,7 +161,9 @@ func (c *Coordinator) TaskDone(args *DoneForTaskArgs, reply *ExampleReply) error
 //返回文件的编号,如果返回-1则map全部开始
 func (c *Coordinator) atomicMap() int {
 	tmp := -1
+	log.Printf(" ")
 	c.mapLock.Lock()
+	log.Printf(" ")
 	for i := 0; i < len(c.mapTask); i++ {
 		if c.mapTask[i].state == idle {
 			c.mapTask[i].state = inProgress
@@ -169,7 +171,9 @@ func (c *Coordinator) atomicMap() int {
 			break
 		}
 	}
+	log.Printf(" ")
 	c.mapLock.Unlock()
+	log.Printf(" ")
 	return tmp
 }
 
