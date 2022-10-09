@@ -111,6 +111,7 @@ func (c *Coordinator) InitCall(args *ExampleArgs, reply *InitReply) error {
 func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) error {
 	log.Printf("woker(%d)请求", args.X)
 	mapNum := c.atomicMap()
+	log.Printf("woker(%d)请求,atomicMap完成", args.X)
 	if mapNum != -1 { //分配maptask成功
 		reply.TaskType = 0
 		reply.TaskNumber = mapNum
@@ -122,6 +123,7 @@ func (c *Coordinator) CallForTask(args *ExampleArgs, reply *CallForTaskReply) er
 		if c.mapDoneNum == c.nMap && c.reduceDoneNum < c.nReduce {
 			//请求reduce
 			reduceNum := c.atomicReduce()
+			log.Printf("woker(%d)请求,atomicReduce完成", args.X)
 			if reduceNum != -1 { //分配reducetask成功
 				reply.TaskType = 1
 				reply.TaskNumber = reduceNum
