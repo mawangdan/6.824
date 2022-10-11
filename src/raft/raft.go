@@ -19,6 +19,7 @@ package raft
 
 import (
 	//	"bytes"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,16 +29,27 @@ import (
 )
 
 const (
-	broadcastTime   = time.Millisecond
-	electionTimeout = time.Millisecond
+	BroadcastTime      int64 = int64(time.Millisecond) * 3
+	MaxElectionTimeout int64 = int64(time.Millisecond)
+	MinElectionTimeout int64 = int64(time.Millisecond)
 )
 
-type ServerState int
+//If a candidate or leader discovers
+//that its term is out of date, it immediately reverts to follower state.
+type ServerState int32
 
 const (
 	Leader ServerState = iota
 	Candidate
 	Follower
+)
+
+type ClusterState int
+
+const (
+	C_o ClusterState = iota
+	C_o_n
+	C_n
 )
 
 //
@@ -67,16 +79,23 @@ type ApplyMsg struct {
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
-	mu        sync.Mutex          // Lock to protect shared access to this peer's state
-	peers     []*labrpc.ClientEnd // RPC end points of all peers
-	persister *Persister          // Object to hold this peer's persisted state
-	me        int                 // this peer's index into peers[]
-	dead      int32               // set by Kill()
-
+	mu                sync.Mutex          // Lock to protect shared access to this peer's state
+	peers             []*labrpc.ClientEnd // RPC end points of all peers
+	persister         *Persister          // Object to hold this peer's persisted state
+	me                int                 // this peer's index into peers[]
+	dead              int32               // set by Kill()
+	peerNumber        int
+	majority          int
+	lastHeartBeatTime int64
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 	state ServerState
+
+	//use for membership changes
+	oldClusters  map[int]int
+	newClusters  map[int]int
+	clusterState ClusterState
 
 	//persistent state
 	currentTerm int
@@ -189,10 +208,11 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
-	term         int //candidate’s term
-	candidateId  int //candidate requesting vote
-	lastLogIndex int //index of candidate’s last log entry (§5.4)
-	lastLogTerm  int //term of candidate’s last log entry (§5.4)
+	Term        int //candidate’s term
+	CandidateId int //candidate requesting vote
+	//The next two fields are used for elect restriction
+	LastLogIndex int //index of candidate’s last log entry (§5.4)
+	LastLogTerm  int //term of candidate’s last log entry (§5.4)
 }
 
 //
@@ -201,8 +221,14 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
-	term        int  //currentTerm, for candidate to update itself
-	voteGranted bool //true means candidate received vote
+	Term        int  //currentTerm, for candidate to update itself
+	VoteGranted bool //true means candidate received vote
+}
+
+type ListenOnRPC struct {
+	seq   int
+	ok    bool
+	reply *RequestVoteReply
 }
 
 //
@@ -243,6 +269,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+
 	return ok
 }
 
@@ -291,14 +318,117 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func (rf *Raft) getState() ServerState {
+	return ServerState(atomic.LoadInt32((*int32)(&rf.state)))
+}
+
+func (rf *Raft) getLastHeartBeatTime() int64 {
+	return atomic.LoadInt64(&rf.lastHeartBeatTime)
+}
+
+//需要原子操作，否则可能越界
+func (rf *Raft) getLastLog() LogEntry {
+	lastLog := rf.log[len(rf.log)-1]
+	return lastLog
+}
+
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
 func (rf *Raft) ticker() {
+	rand.Seed(time.Now().UnixNano())
+	electionTimeout := rand.Int63n(MaxElectionTimeout-MinElectionTimeout) + MinElectionTimeout
 	for rf.killed() == false {
-
+		//选举过程中发现任何leader发出的newterm都变成follower
+		//发现的任何newterm变成follower
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
+		//至少要睡这么久
+		sleepTime := electionTimeout - (time.Now().UnixNano() - rf.getLastHeartBeatTime())
+		if sleepTime >= 0 {
+			time.Sleep(time.Duration(sleepTime))
+		}
+		//follower 超时没有心跳,开始选举,
+		//这里要考虑选举中途会不会身份发生改变
+		//1.follower->leader 不可能
+		//2.follower->candidate 只可能是下面的代码
+		//所以if不需要加锁
+		if time.Now().UnixNano()-rf.getLastHeartBeatTime() >= electionTimeout && (rf.getState() == Follower || rf.getState() == Candidate) {
+			//这个时候收到投票会怎么样
+			//会votefor这个term的leader，假设这个时候选出了leader
+			//不影响，因为后面term++了，所以根据状态转移，前面的leader收到更新的term会变成follower
+
+			rf.mu.Lock()
+			rf.currentTerm++
+			rf.state = Candidate
+			//vote for itself,这个时候
+			//TODO:假设引入membership changes
+			//如果状态属于C_o,C_o_n则可以为自己投票
+			//如果C_n则需要知道自己是否属于new cluster
+			rf.votedFor = rf.me
+			rf.mu.Unlock()
+
+			//如果在ask vote的前中Candidate收到RPC而变成Follower,那么永远无法获得majority
+			//如果是过程中,要特殊处理，不然选举完会以为他是newterm的leader（因为前面oldterm的票会当成newterm的票）:
+			// While waiting for votes, a candidate may receive an
+			// AppendEntries RPC from another server claiming to be
+			// leader. If the leader’s term (included in its RPC) is at least
+			// as large as the candidate’s current term, then the candidate
+			// recognizes the leader as legitimate and returns to follower
+			// state.
+			countVote := 1     //初始1是他自己
+			countAllReply := 1 //初始1是他自己
+
+			startElectTime := time.Now().UnixNano()
+			rf.mu.Lock()
+			for i, _ := range rf.peers {
+				if i != rf.me {
+					lastLog := rf.getLastLog()
+					args := &RequestVoteArgs{rf.currentTerm, rf.me, len(rf.log) - 1, lastLog.term}
+					reply := &RequestVoteReply{}
+					go func() {
+						ret := rf.sendRequestVote(i, args, reply)
+						rf.mu.Lock()
+						if ret {
+							countAllReply++
+							if reply.VoteGranted {
+								countVote++
+							}
+							if reply.Term > rf.currentTerm { //discover server with highter term
+								rf.state = Follower
+							}
+						}
+						rf.mu.Unlock()
+					}()
+				}
+			}
+			rf.mu.Unlock()
+
+			//接收
+			for true {
+				flag := false
+				rf.mu.Lock()
+				//有可能收到AE,或者AV而变成follower，可以直接退出,或者断定肯定没有没有majority
+				last := (rf.peerNumber - countAllReply)
+				if rf.getState() == Follower { //收到AE变成follower
+					flag = true
+				} else if time.Now().UnixNano()-startElectTime > electionTimeout {
+					rf.state = Candidate
+				} else if countVote+last < rf.majority { //肯定输保持Candidate
+					flag = true
+				} else if countVote >= rf.majority {
+					rf.state = Follower
+					flag = true
+				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
+					flag = true
+				}
+				rf.mu.Unlock()
+				if flag { //dont forget releasing the lock
+					break
+				}
+			}
+			//如果不成功就要继续选举
+		}
 
 	}
 }
@@ -322,12 +452,16 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	rf.peerNumber = len(peers)
+	rf.majority = (rf.peerNumber / 2) + 1
 	rf.currentTerm = 0
 	rf.votedFor = -1
 	rf.log = append(rf.log, LogEntry{}) //让第一个log下标为1
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.state = Follower
+	rf.lastHeartBeatTime = time.Now().UnixNano()
+	rf.clusterState = C_o
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
