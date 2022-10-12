@@ -286,10 +286,11 @@ func (rvr *RequestVoteReply) String() string {
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	rf.Log(LogRVRev, "%v", args)
-	defer rf.Log(LogRVSend, "%v", reply)
+	rf.LogLock(LogRVRev, "%v", args)
 
 	rf.mu.Lock()
+	//defer这里顺序错会出问题
+	defer rf.LogLock(LogRVSend, "%v", reply)
 	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
 	// Your code here (2A, 2B).
@@ -327,9 +328,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 //AppendEntries handler
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.Log(LogAERev, "%v", args)
-	defer rf.Log(LogAESend, "%v", reply)
+	rf.LogLock(LogAERev, "%v", args)
 	rf.mu.Lock()
+	//defer这里顺序错会出问题
+	defer rf.LogLock(LogAESend, "%v", reply)
 	defer rf.mu.Unlock()
 	reply.Success = true
 	reply.Term = rf.currentTerm
@@ -394,16 +396,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // the struct itself.
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	rf.Log(LogRVSend, "%v", args)
-	defer rf.Log(LogRVRev, "%v", reply)
+	rf.LogLock(LogRVSend, "%v", args)
+	defer rf.LogLock(LogRVRev, "%v", reply)
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	rf.Log(LogAESend, "%v", args)
-	defer rf.Log(LogAERev, "%v", reply)
+	rf.LogLock(LogAESend, "%v", args)
+	defer rf.LogLock(LogAERev, "%v", reply)
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
@@ -411,7 +413,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 
 //send heart beat
 func (rf *Raft) sendHeartBeat() {
-	rf.Log(LogHeartBeat, "sendHeartBeat")
+	rf.LogLock(LogHeartBeat, "sendHeartBeat")
 
 	rf.mu.Lock()
 	pn := rf.peerNumber
@@ -495,7 +497,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.Log(LogAll, "Kill")
+	rf.LogLock(LogAll, "Kill")
 }
 
 func (rf *Raft) killed() bool {
@@ -525,7 +527,7 @@ func (rf *Raft) ticker() {
 	me := rf.getMe()
 	electionTimeout := rand.Int63n(ElectionMaxInterval.Nanoseconds()) + MinElectionTimeout.Nanoseconds()
 
-	rf.Log(LogElec, "init electionTimeout:%d ms", time.Duration(electionTimeout).Milliseconds())
+	rf.LogLock(LogElec, "init electionTimeout:%d ms", time.Duration(electionTimeout).Milliseconds())
 	for rf.killed() == false {
 		//选举过程中发现任何leader发出的newterm都变成follower
 		//发现的任何newterm变成follower
@@ -539,9 +541,9 @@ func (rf *Raft) ticker() {
 		rf.mu.Unlock()
 		sleepTime := electionTimeout - (time.Now().UnixNano() - lastHeartBeatTime)
 		if sleepTime >= 0 {
-			rf.Log(LogElec, "start election sleep")
+			rf.LogLock(LogElec, "start election sleep")
 			time.Sleep(time.Duration(sleepTime))
-			rf.Log(LogElec, "finish election sleep")
+			rf.LogLock(LogElec, "finish election sleep")
 		}
 		//follower 超时没有心跳,开始选举,
 		//这里要考虑选举中途会不会身份发生改变
@@ -557,7 +559,7 @@ func (rf *Raft) ticker() {
 			//这个时候收到投票会怎么样
 			//会votefor这个term的leader，假设这个时候选出了leader
 			//不影响，因为后面term++了，所以根据状态转移，前面的leader收到更新的term会变成follower
-			rf.Log(LogElec, "开始选举")
+			rf.LogLock(LogElec, "开始选举")
 			rf.mu.Lock()
 			rf.currentTerm++
 			rf.state = Candidate
@@ -615,20 +617,21 @@ func (rf *Raft) ticker() {
 				rf.mu.Lock()
 				//有可能收到AE,或者AV而变成follower，可以直接退出,或者断定肯定没有没有majority
 				last := (rf.peerNumber - countAllReply)
+				retstr := ""
 				if rf.state == Follower { //收到AE变成follower
 					flag = true
-					rf.Log(LogElec, "选举过程收到AE变成Follower")
+					retstr = "选举过程收到AE变成Follower"
 				} else if time.Now().UnixNano()-startElectTime > electionTimeout {
 					rf.state = Candidate
 					flag = true
-					rf.Log(LogElec, "选举过程超时")
+					retstr = "选举过程超时"
 				} else if countVote+last < rf.majority { //肯定输保持Candidate
 					flag = true
-					rf.Log(LogElec, "选举输重来")
+					retstr = "选举输重来"
 				} else if countVote >= rf.majority {
 					rf.state = Leader
 					flag = true
-					rf.Log(LogElec, "选举成功")
+					retstr = "选举成功"
 					// Once a candidate wins an election, it
 					// becomes leader. It then sends heartbeat messages to all of
 					// the other servers to establish its authority and prevent new
@@ -637,9 +640,10 @@ func (rf *Raft) ticker() {
 					//
 				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
 					flag = true
-					rf.Log(LogElec, "选举输重来")
+					retstr = "选举输重来"
 				}
 				rf.mu.Unlock()
+				rf.LogLock(LogElec, retstr)
 				if flag { //dont forget releasing the lock
 					break
 				}
@@ -649,12 +653,17 @@ func (rf *Raft) ticker() {
 	}
 }
 
-func (rf *Raft) Log(lt LogType, format string, a ...interface{}) {
+func (rf *Raft) LogLock(lt LogType, format string, a ...interface{}) {
 	rf.mu.Lock()
 	state := rf.state
 	rf.mu.Unlock()
 
 	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), state, lt)
+	DPrintf(lt, perfix, format, a...)
+}
+
+func (rf *Raft) Log(lt LogType, format string, a ...interface{}) {
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), "Unknown", lt)
 	DPrintf(lt, perfix, format, a...)
 }
 
@@ -690,7 +699,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	rf.Log(LogAll, "rf's created!")
+	rf.LogLock(LogAll, "rf's created!")
+	rf.LogLock(LogAll, "majority: %d", (rf.peerNumber/2)+1)
 	// start ticker goroutine to start elections
 	go rf.ticker()
 	return rf
