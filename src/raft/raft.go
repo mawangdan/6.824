@@ -316,6 +316,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	//其他情况可能同意
 	if oldTerm < args.Term {
 		rf.votedFor = args.CandidateId
+		rf.state = Follower
 		reply.VoteGranted = true
 	} else if oldTerm == args.Term && (rf.votedFor == -1 || rf.votedFor == args.CandidateId) { //或者还没投或者已经投给他了
 		rf.votedFor = args.CandidateId
@@ -343,6 +344,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} else if rf.currentTerm > args.Term {
 		reply.Success = false
 		return
+	} else { //eq discovers current leader
+		rf.state = Follower
 	}
 
 	if args.LeaderCommit > rf.commitIndex {
@@ -541,7 +544,7 @@ func (rf *Raft) ticker() {
 		rf.mu.Unlock()
 		sleepTime := electionTimeout - (time.Now().UnixNano() - lastHeartBeatTime)
 		if sleepTime >= 0 {
-			rf.LogLock(LogElec, "start election sleep")
+			rf.LogLock(LogElec, "start election sleep:%d ms", time.Duration(sleepTime).Milliseconds())
 			time.Sleep(time.Duration(sleepTime))
 			rf.LogLock(LogElec, "finish election sleep")
 		}
