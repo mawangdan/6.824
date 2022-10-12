@@ -286,7 +286,7 @@ func (rvr *RequestVoteReply) String() string {
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	rf.LogLock(LogRVRev, "%d-->%d  %v", args.CandidateId, rf.getMe(), args)
+	rf.LogLock(LogRVRev, "%d<--%d  %v", rf.getMe(), args.CandidateId, args)
 	rf.mu.Lock()
 	//defer这里顺序错会出问题
 	defer rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), args.CandidateId, reply)
@@ -327,7 +327,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 //AppendEntries handler
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.LogLock(LogAERev, "%d-->%d  %v", args.LeaderId, rf.getMe(), args)
+	rf.LogLock(LogAERev, "%d<--%d  %v", rf.getMe(), args.LeaderId, args)
 	rf.mu.Lock()
 	//defer这里顺序错会出问题
 	defer rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), args.LeaderId, reply)
@@ -396,7 +396,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), server, args)
-	defer rf.LogLock(LogRVRev, "%d-->%d  %v", server, rf.getMe(), reply)
+	defer rf.LogLock(LogRVRev, "%d<--%d  %v", rf.getMe(), server, reply)
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
@@ -404,7 +404,7 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), server, args)
-	defer rf.LogLock(LogAERev, "%d-->%d  %v", server, rf.getMe(), reply)
+	defer rf.LogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, reply)
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
