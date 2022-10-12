@@ -24,7 +24,7 @@ const (
 
 const LogAll = LogAESend | LogAERev | LogRVSend | LogRVRev | LogElec | LogHeartBeat | LogStateChange
 
-const LogEAH = LogElec | LogHeartBeat | LogRVRev | LogRVSend
+const LogEAH = LogElec | LogHeartBeat | LogRVRev | LogRVSend | LogAESend
 
 var LStoStr = map[LogType]string{
 	LogAESend:      "LogAESend",
