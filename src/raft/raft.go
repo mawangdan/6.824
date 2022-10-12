@@ -495,7 +495,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
-	rf.Log(LogFlag, "Kill")
+	rf.Log(LogAll, "Kill")
 }
 
 func (rf *Raft) killed() bool {
@@ -690,7 +690,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	rf.Log(LogFlag, "rf's created!")
+	rf.Log(LogAll, "rf's created!")
 	// start ticker goroutine to start elections
 	go rf.ticker()
 	return rf

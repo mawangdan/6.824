@@ -21,7 +21,9 @@ const (
 	LogStateChange LogType = 1 << 6
 )
 
-const LogFlag = LogAESend | LogAERev | LogRVSend | LogRVRev | LogElec | LogHeartBeat | LogStateChange
+const LogAll = LogAESend | LogAERev | LogRVSend | LogRVRev | LogElec | LogHeartBeat | LogStateChange
+
+const LogEAH = LogElec | LogHeartBeat
 
 var LStoStr = map[LogType]string{
 	LogAESend:      "LogAESend",
@@ -38,7 +40,7 @@ func (ls LogType) String() string {
 }
 func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int, err error) {
 	if Debug {
-		if lt&LogFlag != 0 {
+		if lt&LogEAH != 0 {
 			log.SetPrefix("[" + perfix + "]")
 			log.Printf(format, a...)
 		}
