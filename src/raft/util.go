@@ -5,7 +5,6 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"time"
 )
 
 // Debugging
@@ -35,6 +34,7 @@ var LStoStr = map[LogType]string{
 	LogElec:        "LogElec",
 	LogHeartBeat:   "LogHeartBeat",
 	LogStateChange: "LogStateChange",
+	LogAll:         "LogAll",
 }
 
 func (ls LogType) String() string {
@@ -44,13 +44,22 @@ func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int,
 	if Debug {
 		if lt&LogEAH != 0 {
 
+			//哈哈!从log的源码复制过来的
 			_, file, line, ok := runtime.Caller(3)
 			if !ok {
 				file = "???"
 				line = 0
 			}
-			time := time.Now().Format("2006-01-02 15:04:05")
-			perfix += time + " " + file + ":" + strconv.Itoa(line)
+			short := file
+			for i := len(file) - 1; i > 0; i-- {
+				if file[i] == '/' {
+					short = file[i+1:]
+					break
+				}
+			}
+			file = short
+
+			perfix += " " + file + ":" + strconv.Itoa(line)
 			log.SetPrefix("[" + perfix + "]")
 			log.Printf(format, a...)
 		}
