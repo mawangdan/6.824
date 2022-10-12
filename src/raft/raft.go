@@ -641,7 +641,7 @@ func (rf *Raft) ticker() {
 }
 
 func (rf *Raft) Log(lt LogType, format string, a ...interface{}) {
-	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.me, rf.state, lt)
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), rf.getState(), lt)
 	DPrintf(lt, perfix, format, a...)
 }
 
