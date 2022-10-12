@@ -630,6 +630,10 @@ func (rf *Raft) ticker() {
 				} else if countVote >= rf.majority {
 					rf.state = Leader
 					flag = true
+					rf.mu.Unlock()
+					//不可重入,没有这个会死锁
+					rf.sendHeartBeat()
+					rf.mu.Lock()
 					retstr = "选举成功"
 					// Once a candidate wins an election, it
 					// becomes leader. It then sends heartbeat messages to all of
