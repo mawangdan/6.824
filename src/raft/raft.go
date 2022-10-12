@@ -425,13 +425,21 @@ func (rf *Raft) sendHeartBeat() {
 		server := i
 		go func() {
 			for true {
-				//死亡或者不是leader就停止发心跳
-				if rf.killed() || rf.getState() != Leader {
+				//死亡或者就停止发心跳
+				if rf.killed() {
 					break
 				}
+
 				rf.mu.Lock()
-				args := &AppendEntriesArgs{rf.currentTerm, rf.getMe(), -1, -1, nil, rf.commitIndex}
+				state := rf.state
+				currentTerm := rf.currentTerm
+				commitIndex := rf.commitIndex
 				rf.mu.Unlock()
+				//不是leader停止发心跳
+				if state != Leader {
+					break
+				}
+				args := &AppendEntriesArgs{currentTerm, rf.getMe(), -1, -1, nil, commitIndex}
 				reply := &AppendEntriesReply{}
 				go func() {
 					ok := rf.sendAppendEntries(server, args, reply)
@@ -495,14 +503,6 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-func (rf *Raft) getState() ServerState {
-	return ServerState(atomic.LoadInt32((*int32)(&rf.state)))
-}
-
-func (rf *Raft) getLastHeartBeatTime() int64 {
-	return atomic.LoadInt64(&rf.lastHeartBeatTime)
-}
-
 func (rf *Raft) getMe() int {
 	n := atomic.LoadInt64(&rf.me)
 	return i64Toint(n)
@@ -533,7 +533,11 @@ func (rf *Raft) ticker() {
 		// be started and to randomize sleeping time using
 		// time.Sleep().
 		//至少要睡这么久
-		sleepTime := electionTimeout - (time.Now().UnixNano() - rf.getLastHeartBeatTime())
+
+		rf.mu.Lock()
+		lastHeartBeatTime := rf.lastHeartBeatTime
+		rf.mu.Unlock()
+		sleepTime := electionTimeout - (time.Now().UnixNano() - lastHeartBeatTime)
 		if sleepTime >= 0 {
 			rf.Log(LogElec, "start election sleep")
 			time.Sleep(time.Duration(sleepTime))
@@ -544,7 +548,12 @@ func (rf *Raft) ticker() {
 		//1.follower->leader 不可能
 		//2.follower->candidate 只可能是下面的代码
 		//所以if不需要加锁
-		if time.Now().UnixNano()-rf.getLastHeartBeatTime() >= electionTimeout && (rf.getState() == Follower || rf.getState() == Candidate) {
+		rf.mu.Lock()
+		lastHeartBeatTime = rf.lastHeartBeatTime
+		state := rf.state
+		rf.mu.Unlock()
+
+		if time.Now().UnixNano()-lastHeartBeatTime >= electionTimeout && (state == Follower || state == Candidate) {
 			//这个时候收到投票会怎么样
 			//会votefor这个term的leader，假设这个时候选出了leader
 			//不影响，因为后面term++了，所以根据状态转移，前面的leader收到更新的term会变成follower
@@ -606,7 +615,7 @@ func (rf *Raft) ticker() {
 				rf.mu.Lock()
 				//有可能收到AE,或者AV而变成follower，可以直接退出,或者断定肯定没有没有majority
 				last := (rf.peerNumber - countAllReply)
-				if rf.getState() == Follower { //收到AE变成follower
+				if rf.state == Follower { //收到AE变成follower
 					flag = true
 					rf.Log(LogElec, "选举过程收到AE变成Follower")
 				} else if time.Now().UnixNano()-startElectTime > electionTimeout {
@@ -641,7 +650,11 @@ func (rf *Raft) ticker() {
 }
 
 func (rf *Raft) Log(lt LogType, format string, a ...interface{}) {
-	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), rf.getState(), lt)
+	rf.mu.Lock()
+	state := rf.state
+	rf.mu.Unlock()
+
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), state, lt)
 	DPrintf(lt, perfix, format, a...)
 }
 
