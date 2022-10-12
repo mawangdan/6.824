@@ -75,3 +75,9 @@ func intTo64(i int) int64 {
 	i64, _ := strconv.ParseInt(str, 10, 64)
 	return i64
 }
+
+func i64Toint(i64 int64) int {
+	str := strconv.FormatInt(i64, 10)
+	i, _ := strconv.Atoi(str)
+	return i
+}

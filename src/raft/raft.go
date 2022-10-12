@@ -21,7 +21,6 @@ import (
 	//	"bytes"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -506,9 +505,7 @@ func (rf *Raft) getLastHeartBeatTime() int64 {
 
 func (rf *Raft) getMe() int {
 	n := atomic.LoadInt64(&rf.me)
-	s := strconv.FormatInt(n, 10)
-	i, _ := strconv.Atoi(s)
-	return i
+	return i64Toint(n)
 }
 
 //需要原子操作，否则可能越界
