@@ -643,8 +643,8 @@ func (rf *Raft) ticker() {
 					retstr = "选举输重来"
 				}
 				rf.mu.Unlock()
-				rf.LogLock(LogElec, retstr)
 				if flag { //dont forget releasing the lock
+					rf.LogLock(LogElec, retstr)
 					break
 				}
 			}
