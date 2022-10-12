@@ -45,7 +45,7 @@ func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int,
 		if lt&LogEAH != 0 {
 
 			//哈哈!从log的源码复制过来的
-			_, file, line, ok := runtime.Caller(3)
+			_, file, line, ok := runtime.Caller(2)
 			if !ok {
 				file = "???"
 				line = 0
@@ -59,7 +59,7 @@ func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int,
 			}
 			file = short
 
-			perfix += " " + file + ":" + strconv.Itoa(line)
+			perfix += file + ":" + strconv.Itoa(line)
 			log.SetPrefix("[" + perfix + "]")
 			log.Printf(format, a...)
 		}
