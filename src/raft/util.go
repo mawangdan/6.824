@@ -5,10 +5,13 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"sync"
 )
 
 // Debugging
 const Debug = true
+
+var logMu sync.Mutex
 
 type LogType uint64
 
@@ -60,8 +63,10 @@ func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int,
 			file = short
 
 			perfix += file + ":" + strconv.Itoa(line)
+			logMu.Lock()
 			log.SetPrefix("[" + perfix + "]")
 			log.Printf(format, a...)
+			logMu.Unlock()
 		}
 	}
 	return

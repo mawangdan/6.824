@@ -659,9 +659,9 @@ func (rf *Raft) ticker() {
 func (rf *Raft) LogLock(lt LogType, format string, a ...interface{}) {
 	rf.mu.Lock()
 	state := rf.state
+	term := rf.currentTerm
 	rf.mu.Unlock()
-
-	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), state, lt)
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d)", rf.getMe(), state, lt, term)
 	DPrintf(lt, perfix, format, a...)
 }
 
