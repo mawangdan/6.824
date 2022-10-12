@@ -286,11 +286,10 @@ func (rvr *RequestVoteReply) String() string {
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	rf.LogLock(LogRVRev, "%v", args)
-
+	rf.LogLock(LogRVRev, "%d-->%d  %v", args.CandidateId, rf.getMe(), args)
 	rf.mu.Lock()
 	//defer这里顺序错会出问题
-	defer rf.LogLock(LogRVSend, "%v", reply)
+	defer rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), args.CandidateId, reply)
 	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
 	// Your code here (2A, 2B).
@@ -328,10 +327,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 //AppendEntries handler
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.LogLock(LogAERev, "%v", args)
+	rf.LogLock(LogAERev, "%d-->%d  %v", args.LeaderId, rf.getMe(), args)
 	rf.mu.Lock()
 	//defer这里顺序错会出问题
-	defer rf.LogLock(LogAESend, "%v", reply)
+	defer rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), args.LeaderId, reply)
 	defer rf.mu.Unlock()
 	reply.Success = true
 	reply.Term = rf.currentTerm
@@ -396,16 +395,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // the struct itself.
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	rf.LogLock(LogRVSend, "%v", args)
-	defer rf.LogLock(LogRVRev, "%v", reply)
+	rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), server, args)
+	defer rf.LogLock(LogRVRev, "%d-->%d  %v", server, rf.getMe(), reply)
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	rf.LogLock(LogAESend, "%v", args)
-	defer rf.LogLock(LogAERev, "%v", reply)
+	rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), server, args)
+	defer rf.LogLock(LogAERev, "%d-->%d  %v", server, rf.getMe(), reply)
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
