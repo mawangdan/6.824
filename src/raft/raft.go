@@ -225,17 +225,44 @@ type RequestVoteReply struct {
 	VoteGranted bool //true means candidate received vote
 }
 
-type ListenOnRPC struct {
-	seq   int
-	ok    bool
-	reply *RequestVoteReply
-}
-
 //
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	reply.Term = rf.currentTerm
 	// Your code here (2A, 2B).
+	if rf.currentTerm > args.Term {
+		reply.VoteGranted = false
+		return
+	}
+
+	oldTerm := rf.currentTerm
+	rf.currentTerm = args.Term
+
+	// the
+	// voter denies its vote if its own log is more up-to-date than
+	// that of the candidate.
+	if rf.getLastLog().term > args.LastLogTerm {
+		reply.VoteGranted = false
+		return
+	} else if rf.getLastLog().term == args.LastLogTerm && rf.getLastLogIndex() > args.LastLogIndex {
+		reply.VoteGranted = false
+		return
+	}
+
+	//其他情况可能同意
+	if oldTerm < args.Term {
+		rf.votedFor = args.CandidateId
+		reply.VoteGranted = true
+	} else if oldTerm == args.Term && (rf.votedFor == -1 || rf.votedFor == args.CandidateId) { //或者还没投或者已经投给他了
+		rf.votedFor = args.CandidateId
+		reply.VoteGranted = true
+	} else { //否则不投给他
+		reply.VoteGranted = false
+	}
+	return
 }
 
 //
@@ -330,6 +357,10 @@ func (rf *Raft) getLastHeartBeatTime() int64 {
 func (rf *Raft) getLastLog() LogEntry {
 	lastLog := rf.log[len(rf.log)-1]
 	return lastLog
+}
+
+func (rf *Raft) getLastLogIndex() int {
+	return len(rf.log) - 1
 }
 
 // The ticker go routine starts a new election if this peer hasn't received
