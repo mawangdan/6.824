@@ -573,12 +573,13 @@ func (rf *Raft) ticker() {
 			startElectTime := time.Now().UnixNano()
 			rf.mu.Lock()
 			for i := 0; i < rf.peerNumber; i++ {
-				if i != me {
+				index := i
+				if index != me {
 					lastLog := rf.getLastLog()
 					args := &RequestVoteArgs{rf.currentTerm, me, len(rf.log) - 1, lastLog.Term}
 					reply := &RequestVoteReply{}
 					go func() {
-						ret := rf.sendRequestVote(i, args, reply)
+						ret := rf.sendRequestVote(index, args, reply)
 						rf.mu.Lock()
 						if ret {
 							countAllReply++
