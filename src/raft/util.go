@@ -3,7 +3,9 @@ package raft
 import (
 	"log"
 	"os"
+	"runtime"
 	"strconv"
+	"time"
 )
 
 // Debugging
@@ -41,6 +43,14 @@ func (ls LogType) String() string {
 func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int, err error) {
 	if Debug {
 		if lt&LogEAH != 0 {
+
+			_, file, line, ok := runtime.Caller(3)
+			if !ok {
+				file = "???"
+				line = 0
+			}
+			time := time.Now().Format("2006-01-02 15:04:05")
+			perfix += time + " " + file + ":" + strconv.Itoa(line)
 			log.SetPrefix("[" + perfix + "]")
 			log.Printf(format, a...)
 		}
@@ -54,7 +64,6 @@ func initLog(file string) {
 		panic(err)
 	}
 	log.SetOutput(logFile) // 将文件设置为log输出的文件
-	log.SetFlags(log.LstdFlags | log.Lshortfile | log.LUTC)
 	return
 }
 
