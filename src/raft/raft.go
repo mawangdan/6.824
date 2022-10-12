@@ -661,7 +661,7 @@ func (rf *Raft) LogLock(lt LogType, format string, a ...interface{}) {
 	state := rf.state
 	term := rf.currentTerm
 	rf.mu.Unlock()
-	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d)", rf.getMe(), state, lt, term)
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d) ", rf.getMe(), state, lt, term)
 	DPrintf(lt, perfix, format, a...)
 }
 
