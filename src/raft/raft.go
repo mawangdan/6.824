@@ -21,6 +21,7 @@ import (
 	//	"bytes"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -396,7 +397,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), server, args)
-	defer rf.LogLock(LogRVRev, "%d<--%d  %v", rf.getMe(), server, reply)
+	defer rf.LogLock(LogRVRev, "%d<--%d  %v term为(%d)发出", rf.getMe(), server, reply, args.Term)
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
@@ -594,7 +595,7 @@ func (rf *Raft) ticker() {
 						if ret {
 							countAllReply++
 							if reply.VoteGranted {
-								countVote++
+								countVote++ //这里有没有可能加到下次循环的countAllReply上面
 							}
 							if reply.Term > rf.currentTerm { //discover server with highter term
 								rf.state = Follower
@@ -634,7 +635,7 @@ func (rf *Raft) ticker() {
 					//不可重入,没有这个会死锁
 					rf.sendHeartBeat()
 					rf.mu.Lock()
-					retstr = "选举成功"
+					retstr = "选举成功 Term(" + strconv.Itoa(rf.currentTerm) + ")"
 					// Once a candidate wins an election, it
 					// becomes leader. It then sends heartbeat messages to all of
 					// the other servers to establish its authority and prevent new
