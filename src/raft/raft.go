@@ -33,8 +33,8 @@ import (
 const (
 	BroadcastTime       time.Duration = time.Second / 8 //一秒8次heartbeat
 	BroadcastTime1_5    time.Duration = BroadcastTime * 3 / 2
-	MaxElectionTimeout  time.Duration = BroadcastTime * 5
-	MinElectionTimeout  time.Duration = BroadcastTime * 4
+	MaxElectionTimeout  time.Duration = BroadcastTime * 3
+	MinElectionTimeout  time.Duration = BroadcastTime * 2
 	ElectionMaxInterval time.Duration = MaxElectionTimeout - MinElectionTimeout
 	Millisecond10       time.Duration = 10 * time.Millisecond
 	Millisecond3        time.Duration = 3 * time.Millisecond
