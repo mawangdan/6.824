@@ -684,6 +684,17 @@ func (rf *Raft) ticker() {
 					// becomes leader. It then sends heartbeat messages to all of
 					// the other servers to establish its authority and prevent new
 					// elections.
+					rf.sendHeartBeat()
+					rf.mu.Lock()
+					rf.lastHeartBeatTime = time.Now().UnixNano()
+					retstr = "选举成功 Term(" + strconv.Itoa(rf.currentTerm) + ")"
+					// When a leader first comes to power,
+					// it initializes all nextIndex values to the index just after the
+					// last one in its log (11 in Figure 7).
+					for j := 0; j < rf.peerNumber; j++ {
+						rf.nextIndex[j]=rf.getLastLogIndex()
+					}
+
 				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
 					flag = true
 					retstr = "选举输重来"
