@@ -125,10 +125,11 @@ type Raft struct {
 	lastApplied int
 
 	//only leader Reinitialized after election
-	nextIndex  []int
+	nextIndex  []int //下一个log将要放的位置
 	matchIndex []int
 	//help client to redirect the leader
 	leaderId int
+	applyCh  chan ApplyMsg
 }
 
 //need lock
@@ -154,8 +155,9 @@ type AppendEntriesArgs struct {
 	Term     int //leader's term
 	LeaderId int
 	//下面两项用于检查冲突
+	//index of log entry which is immediately preceding new ones
 	PrevLogIndex int
-	PervLogTerm  int
+	PrevLogTerm  int
 
 	Entries      []LogEntry
 	LeaderCommit int
@@ -173,7 +175,7 @@ func (aea *AppendEntriesArgs) String() string {
 		aea.Term,
 		aea.LeaderId,
 		aea.PrevLogIndex,
-		aea.PervLogTerm,
+		aea.PrevLogTerm,
 		e,
 		aea.LeaderCommit)
 	return s
@@ -321,6 +323,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	oldTerm := rf.currentTerm
 	rf.currentTerm = args.Term
 
+	//Election restriction
 	// the
 	// voter denies its vote if its own log is more up-to-date than
 	// that of the candidate.
@@ -460,7 +463,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 				rf.currentTerm = reply.Term
 				rf.state = Follower
 			}
-			rf.mu.Lock()
+			rf.mu.Unlock()
 		} else {
 			rf.pLogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, "报文接收失败")
 		}
@@ -475,11 +478,28 @@ func (rf *Raft) sendHeartBeat() {
 	pn := rf.peerNumber
 	me := rf.getMe()
 	for i := 0; i < pn; i++ {
+		server := i
 		//对每个follower发送心跳
-		if i == me {
+		if server == me { //给自己发心跳
+			go func() {
+				for true {
+					if rf.killed() {
+						break
+					}
+					rf.mu.Lock()
+					state := rf.state
+					rf.mu.Unlock()
+					if state != Leader {
+						break
+					}
+					rf.mu.Lock()
+					rf.lastHeartBeatTime = time.Now().UnixNano()
+					rf.mu.Unlock()
+					time.Sleep(BroadcastTime)
+				}
+			}()
 			continue
 		}
-		server := i
 		go func() {
 			for true {
 				//死亡或者就停止发心跳
@@ -574,7 +594,6 @@ func (rf *Raft) LogReplication(index int) {
 		}
 	}
 	rf.mu.Unlock()
-
 
 	//等待majority
 	for i := 0; i < rf.peerNumber-1; i++ {
@@ -749,20 +768,20 @@ func (rf *Raft) ticker() {
 							if reply.VoteGranted {
 								countVote++ //TODO:这里有没有可能加到下次大循环的countAllReply上面
 							}
-							if reply.Term > rf.currentTerm { //discover server with highter term
-								rf.state = Follower
-								rf.currentTerm = reply.Term
-							}
 						}
 						rf.mu.Unlock()
+
+						rpcChan <- true //要先把票加上去
 					}()
 				}
 			}
 			rf.pLog(LogElec, "Vote 发送完毕")
+			perN := rf.peerNumber
 			rf.mu.Unlock()
 
-			//接收
-			for true {
+			//接收majority
+			for p := 0; p < perN-1; p++ {
+				<-rpcChan
 				if rf.killed() {
 					break
 				}
@@ -787,10 +806,6 @@ func (rf *Raft) ticker() {
 					flag = true
 					rf.mu.Unlock()
 					//不可重入,没有这个会死锁
-					rf.sendHeartBeat()
-					rf.mu.Lock()
-					rf.lastHeartBeatTime = time.Now().UnixNano()
-					retstr = "选举成功 Term(" + strconv.Itoa(rf.currentTerm) + ")"
 					// Once a candidate wins an election, it
 					// becomes leader. It then sends heartbeat messages to all of
 					// the other servers to establish its authority and prevent new
@@ -803,7 +818,7 @@ func (rf *Raft) ticker() {
 					// it initializes all nextIndex values to the index just after the
 					// last one in its log (11 in Figure 7).
 					for j := 0; j < rf.peerNumber; j++ {
-						rf.nextIndex[j] = rf.getLastLogIndex()+1
+						rf.nextIndex[j] = rf.getLastLogIndex() + 1
 					}
 
 				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
@@ -858,13 +873,20 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.majority = (rf.peerNumber / 2) + 1
 	rf.currentTerm = 0
 	rf.votedFor = -1
-	rf.log = append(rf.log, LogEntry{}) //让第一个log下标为1
+	rf.log = append(rf.log, LogEntry{nil, 0}) //让第一个log下标为1
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.state = Follower
 	rf.lastHeartBeatTime = time.Now().UnixNano()
 	rf.clusterState = C_o
+
+	for i := 0; i < rf.peerNumber; i++ {
+		rf.matchIndex = append(rf.matchIndex, -1)
+		rf.nextIndex = append(rf.nextIndex, 1)
+	}
+
 	// initialize from state persisted before a crash
+
 	rf.readPersist(persister.ReadRaftState())
 
 	rf.pLogLock(LogAll, "rf's created!")
