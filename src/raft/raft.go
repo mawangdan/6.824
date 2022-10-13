@@ -359,7 +359,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.Success = false
 		return
 	} else { //eq discovers current leader
-		//TODO: rf.state = Follower
+		rf.state = Follower
+		rf.lastHeartBeatTime = time.Now().UnixNano()
 	}
 
 	if args.LeaderCommit > rf.commitIndex {
@@ -661,8 +662,6 @@ func (rf *Raft) ticker() {
 					// becomes leader. It then sends heartbeat messages to all of
 					// the other servers to establish its authority and prevent new
 					// elections.
-					// TODO:发送心跳给所有的server
-					//
 				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
 					flag = true
 					retstr = "选举输重来"
