@@ -499,19 +499,108 @@ func (rf *Raft) sendHeartBeat() {
 				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), -1, -1, nil, commitIndex}
 				reply := &AppendEntriesReply{}
 				go func() {
-					ok := rf.sendAppendEntries(server, args, reply)
-					rf.mu.Lock()
-					defer rf.mu.Unlock()
-					if ok && rf.currentTerm < reply.Term {
-						rf.currentTerm = reply.Term
-						rf.state = Follower
-					}
+					rf.sendAppendEntries(server, args, reply)
 				}()
 				time.Sleep(BroadcastTime)
 			}
 		}()
 	}
 	rf.mu.Unlock()
+}
+
+//需要锁
+func (rf *Raft) commitIndexChange(c int) {
+	if c > rf.commitIndex {
+		rf.commitIndex = c
+	}
+}
+
+func (rf *Raft) LogReplication(index int) {
+	rf.mu.Lock()
+	rf.pLog(LogRP,"开始LogReplication")
+	cntReplicated := 1 //1 for itself
+	var waitChn chan bool
+	for i := 0; i < rf.peerNumber; i++ {
+		server := i
+		if server != rf.getMe() {
+			// 	the leader must find the latest log entry where the two
+			// logs agree, delete any entries in the follower’s log after
+			// that point, and send the follower all of the leader’s entries
+			// after that point.
+			go func() {
+				for true {
+					if rf.killed() {
+						break
+					}
+					rf.mu.Lock()
+					state := rf.state
+					if state != Leader {
+						rf.mu.Unlock()
+						break
+					}
+
+					args := &AppendEntriesArgs{}
+					reply := &AppendEntriesReply{}
+					args.LeaderCommit = rf.commitIndex
+					args.LeaderId = rf.getMe()
+					args.PrevLogIndex = rf.nextIndex[server] - 1
+					args.PrevLogTerm = rf.log[args.PrevLogIndex].Term
+
+					args.Term = rf.currentTerm
+					for eIndex := rf.nextIndex[server]; eIndex <= rf.getLastLogIndex(); eIndex++ {
+						args.Entries = append(args.Entries, rf.getLastLog())
+					}
+					rf.mu.Unlock()
+					ok := rf.sendAppendEntries(server, args, reply)
+					rf.mu.Lock()
+					if ok {
+						if reply.Success {
+							//被正常replicate
+							cntReplicated++
+							rf.mu.Unlock()
+							break
+						} else {
+							// After a rejection, the leader decrements nextIndex and retries
+							// the AppendEntries RPC. Eventually nextIndex will reach
+							// a point where the leader and follower logs match.
+							rf.nextIndex[server]--
+						}
+					}
+					rf.mu.Unlock()
+				}
+				//wakeup 下面的代码
+				waitChn <- true
+			}()
+		}
+	}
+	rf.mu.Unlock()
+
+
+	//等待majority
+	for i := 0; i < rf.peerNumber-1; i++ {
+		<-waitChn //阻塞
+		if rf.killed() {
+			break
+		}
+
+		flag := false
+
+		rf.mu.Lock()
+		state := rf.state
+		if state != Leader {
+			flag = true
+		}
+		if state==Leader&&cntReplicated >= rf.majority {
+			rf.commitIndexChange(index)
+			flag = true
+		}
+		rf.mu.Unlock()
+
+		if flag {
+			break
+		}
+	}
+
 }
 
 //
