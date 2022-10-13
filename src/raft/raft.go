@@ -780,12 +780,14 @@ func (rf *Raft) ticker() {
 			rf.mu.Unlock()
 
 			//接收majority
+			//DONE: 如果自己一个人一直发起投票，goroutine会无限创建
 			for p := 0; p < perN-1; p++ {
 				<-rpcChan
 				if rf.killed() {
 					break
 				}
 				flag := false
+				shouldSlp := false
 				rf.mu.Lock()
 				//有可能收到AE,或者AV而变成follower，可以直接退出,或者断定肯定没有没有majority
 				last := (rf.peerNumber - countAllReply)
@@ -798,9 +800,11 @@ func (rf *Raft) ticker() {
 					rf.state = Candidate
 					flag = true
 					retstr = "选举过程超时"
+					shouldSlp = true
 				} else if countVote+last < rf.majority { //肯定输保持Candidate
 					flag = true
 					retstr = "选举输重来"
+					shouldSlp = true
 				} else if countVote >= rf.majority {
 					rf.state = Leader
 					flag = true
@@ -824,10 +828,14 @@ func (rf *Raft) ticker() {
 				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
 					flag = true
 					retstr = "选举输重来"
+					shouldSlp = true
 				}
 				rf.mu.Unlock()
 				if flag { //dont forget releasing the lock
 					rf.pLogLock(LogElec, retstr)
+					if shouldSlp {
+						time.Sleep(time.Duration(rand.Intn(15) * int(time.Millisecond)))
+					}
 					break
 				}
 			}
@@ -845,6 +853,7 @@ func (rf *Raft) pLogLock(lt LogType, format string, a ...interface{}) {
 	DPrintf(lt, perfix, format, a...)
 }
 
+//需要加rf锁
 func (rf *Raft) pLog(lt LogType, format string, a ...interface{}) {
 	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d) ", rf.getMe(), rf.state, lt, rf.currentTerm)
 	DPrintf(lt, perfix, format, a...)
