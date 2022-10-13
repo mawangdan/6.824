@@ -519,7 +519,7 @@ func (rf *Raft) LogReplication(index int) {
 	rf.mu.Lock()
 	rf.pLog(LogRP,"开始LogReplication")
 	cntReplicated := 1 //1 for itself
-	var waitChn chan bool
+	waitChn:=make(chan bool,rf.peerNumber)
 	for i := 0; i < rf.peerNumber; i++ {
 		server := i
 		if server != rf.getMe() {
@@ -723,7 +723,7 @@ func (rf *Raft) ticker() {
 			// state.
 			countVote := 1     //初始1是他自己
 			countAllReply := 1 //初始1是他自己
-
+			rpcChan := make(chan bool, rf.peerNumber)
 			startElectTime := time.Now().UnixNano()
 			for i := 0; i < rf.peerNumber; i++ {
 				index := i
