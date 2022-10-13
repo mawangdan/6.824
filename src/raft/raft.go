@@ -692,7 +692,7 @@ func (rf *Raft) ticker() {
 					// it initializes all nextIndex values to the index just after the
 					// last one in its log (11 in Figure 7).
 					for j := 0; j < rf.peerNumber; j++ {
-						rf.nextIndex[j]=rf.getLastLogIndex()
+						rf.nextIndex[j] = rf.getLastLogIndex()+1
 					}
 
 				} else if countAllReply == rf.peerNumber && countVote < rf.majority { //所有票到，一定输了
