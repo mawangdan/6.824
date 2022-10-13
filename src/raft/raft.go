@@ -32,9 +32,12 @@ import (
 
 const (
 	BroadcastTime       time.Duration = time.Second / 8 //一秒8次heartbeat
+	BroadcastTime1_5    time.Duration = BroadcastTime * 3 / 2
 	MaxElectionTimeout  time.Duration = BroadcastTime * 2
 	MinElectionTimeout  time.Duration = BroadcastTime * 3 / 2
 	ElectionMaxInterval time.Duration = MaxElectionTimeout - MinElectionTimeout
+	Millisecond10       time.Duration = 10 * time.Millisecond
+	Millisecond3        time.Duration = 3 * time.Millisecond
 )
 
 //If a candidate or leader discovers
@@ -146,6 +149,8 @@ func (le *LogEntry) String() string {
 }
 
 type AppendEntriesArgs struct {
+	Seq int //每个Rpc交互一个
+
 	Term     int //leader's term
 	LeaderId int
 	//下面两项用于检查冲突
@@ -163,7 +168,8 @@ func (aea *AppendEntriesArgs) String() string {
 		e += le
 	}
 	e += ">"
-	s := fmt.Sprintf("AppendEntriesArgs{Term :%d,LeaderId :%d,PrevLogIndex:%d,PervLogTerm :%d,Entries :%v,LeaderCommit:%d}",
+	s := fmt.Sprintf("AppendEntriesArgs{Seq :%d,Term :%d,LeaderId :%d,PrevLogIndex:%d,PervLogTerm :%d,Entries :%v,LeaderCommit:%d}",
+		aea.Seq,
 		aea.Term,
 		aea.LeaderId,
 		aea.PrevLogIndex,
@@ -174,13 +180,15 @@ func (aea *AppendEntriesArgs) String() string {
 }
 
 type AppendEntriesReply struct {
+	Seq int //每个Rpc交互一个
+
 	Term    int  //currentTerm, for leader to update itself
 	Success bool //true if follower contained entry matching prevLogIndex and prevLogTerm
 
 }
 
 func (aer *AppendEntriesReply) String() string {
-	s := fmt.Sprintf("AppendEntriesReply{Term :%d,Success :%t}", aer.Term, aer.Success)
+	s := fmt.Sprintf("AppendEntriesReply{Seq :%d,Term :%d,Success :%t}", aer.Seq, aer.Term, aer.Success)
 	return s
 }
 
@@ -261,6 +269,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 // field names must start with capital letters!
 //
 type RequestVoteArgs struct {
+	Seq int //每个Rpc交互一个
 	// Your data here (2A, 2B).
 	Term        int //candidate’s term
 	CandidateId int //candidate requesting vote
@@ -270,7 +279,7 @@ type RequestVoteArgs struct {
 }
 
 func (rva *RequestVoteArgs) String() string {
-	s := fmt.Sprintf("RequestVoteArgs{Term: %d,CandidateId: %d,LastLogIndex: %d,LastLogTerm: %d}", rva.Term, rva.CandidateId, rva.LastLogIndex, rva.LastLogTerm)
+	s := fmt.Sprintf("RequestVoteArgs{Seq: %d,Term: %d,CandidateId: %d,LastLogIndex: %d,LastLogTerm: %d}", rva.Seq, rva.Term, rva.CandidateId, rva.LastLogIndex, rva.LastLogTerm)
 	return s
 }
 
@@ -279,13 +288,14 @@ func (rva *RequestVoteArgs) String() string {
 // field names must start with capital letters!
 //
 type RequestVoteReply struct {
+	Seq int //每个Rpc交互一个
 	// Your data here (2A).
 	Term        int  //currentTerm, for candidate to update itself
 	VoteGranted bool //true means candidate received vote
 }
 
 func (rvr *RequestVoteReply) String() string {
-	s := fmt.Sprintf("RequestVoteReply{Term: %d,VoteGranted: %t}", rvr.Term, rvr.VoteGranted)
+	s := fmt.Sprintf("RequestVoteReply{Seq: %d,Term: %d,VoteGranted: %t}", rvr.Seq, rvr.Term, rvr.VoteGranted)
 	return s
 }
 
@@ -414,6 +424,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // the struct itself.
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+	seq := getRpcn()
+	args.Seq = seq
+	reply.Seq = seq
 	rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), server, args)
 	defer func() {
 		rf.LogLock(LogRVRev, "%d<--%d  %v term为(%d)发出", rf.getMe(), server, reply, args.Term)
@@ -424,6 +437,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	seq := getRpcn()
+	args.Seq = seq
+	reply.Seq = seq
 	rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), server, args)
 	defer func() {
 		rf.LogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, reply)
@@ -463,7 +479,7 @@ func (rf *Raft) sendHeartBeat() {
 				if state != Leader {
 					break
 				}
-				args := &AppendEntriesArgs{currentTerm, rf.getMe(), -1, -1, nil, commitIndex}
+				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), -1, -1, nil, commitIndex}
 				reply := &AppendEntriesReply{}
 				go func() {
 					ok := rf.sendAppendEntries(server, args, reply)
@@ -545,9 +561,9 @@ func (rf *Raft) getLastLogIndex() int {
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
 func (rf *Raft) ticker() {
-	rand.Seed(time.Now().UnixNano())
 	me := rf.getMe()
-	electionTimeout := rand.Int63n(ElectionMaxInterval.Nanoseconds()) + MinElectionTimeout.Nanoseconds()
+	//electionTimeout之间的间隔最好是大于一个HB(这里取1.5)
+	electionTimeout := rand.Int63n(ElectionMaxInterval.Nanoseconds())/Millisecond3.Nanoseconds()*Millisecond3.Nanoseconds() + MinElectionTimeout.Nanoseconds()
 
 	rf.LogLock(LogElec, "init electionTimeout:%d ms", time.Duration(electionTimeout).Milliseconds())
 	for rf.killed() == false {
@@ -609,7 +625,7 @@ func (rf *Raft) ticker() {
 				index := i
 				if index != me {
 					lastLog := rf.getLastLog()
-					args := &RequestVoteArgs{rf.currentTerm, me, len(rf.log) - 1, lastLog.Term}
+					args := &RequestVoteArgs{-1, rf.currentTerm, me, len(rf.log) - 1, lastLog.Term}
 					reply := &RequestVoteReply{}
 					go func() {
 						ret := rf.sendRequestVote(index, args, reply)

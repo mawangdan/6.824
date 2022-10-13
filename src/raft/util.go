@@ -8,6 +8,17 @@ import (
 	"sync"
 )
 
+var rpcn = 1
+var rpcnMu sync.Mutex
+
+func getRpcn() int {
+	rpcnMu.Lock()
+	ret := rpcn
+	rpcn++
+	rpcnMu.Unlock()
+	return ret
+}
+
 // Debugging
 const Debug = true
 
