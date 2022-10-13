@@ -517,9 +517,9 @@ func (rf *Raft) commitIndexChange(c int) {
 
 func (rf *Raft) LogReplication(index int) {
 	rf.mu.Lock()
-	rf.pLog(LogRP,"开始LogReplication")
+	rf.pLog(LogRP, "开始LogReplication")
 	cntReplicated := 1 //1 for itself
-	waitChn:=make(chan bool,rf.peerNumber)
+	waitChn := make(chan bool, rf.peerNumber)
 	for i := 0; i < rf.peerNumber; i++ {
 		server := i
 		if server != rf.getMe() {
@@ -590,7 +590,7 @@ func (rf *Raft) LogReplication(index int) {
 		if state != Leader {
 			flag = true
 		}
-		if state==Leader&&cntReplicated >= rf.majority {
+		if state == Leader && cntReplicated >= rf.majority {
 			rf.commitIndexChange(index)
 			flag = true
 		}
@@ -618,13 +618,23 @@ func (rf *Raft) LogReplication(index int) {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
+
 	index := -1
 	term := -1
-	isLeader := true
-
 	// Your code here (2B).
-
-	return index, term, isLeader
+	rf.mu.Lock()
+	state := rf.state
+	rf.mu.Unlock()
+	if state != Leader {
+		return index, term, false
+	}
+	rf.mu.Lock()
+	rf.log = append(rf.log, LogEntry{Command: command, Term: term})
+	index = rf.getLastLogIndex()
+	term = rf.currentTerm
+	rf.mu.Unlock()
+	go rf.LogReplication(index)
+	return index, term, true
 }
 
 //
