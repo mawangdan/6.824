@@ -432,7 +432,13 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	defer func() {
 		if ok {
-			rf.pLogLock(LogRVRev, "%d<--%d  %v", rf.getMe(), server, reply)
+			rf.mu.Lock()
+			rf.pLog(LogRVRev, "%d<--%d  %v", rf.getMe(), server, reply)
+			if reply.Term > rf.currentTerm { //discover server with highter term
+				rf.state = Follower
+				rf.currentTerm = reply.Term
+			}
+			rf.mu.Unlock()
 		} else {
 			rf.pLogLock(LogRVRev, "%d<--%d  %v", rf.getMe(), server, "报文接收失败")
 		}
@@ -448,7 +454,13 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	defer func() {
 		if ok {
-			rf.pLogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, reply)
+			rf.mu.Lock()
+			rf.pLog(LogAERev, "%d<--%d  %v", rf.getMe(), server, reply)
+			if reply.Success == false && reply.Term > rf.currentTerm {
+				rf.currentTerm = reply.Term
+				rf.state = Follower
+			}
+			rf.mu.Lock()
 		} else {
 			rf.pLogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, "报文接收失败")
 		}
