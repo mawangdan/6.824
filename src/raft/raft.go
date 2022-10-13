@@ -128,6 +128,12 @@ type Raft struct {
 	leaderId int
 }
 
+//need lock
+func (rf *Raft) String() string {
+	s := fmt.Sprintf("Raft{currentTerm: %d,votedFor: %d,commitIndex: %d,lastApplied: %d}", rf.currentTerm, rf.votedFor, rf.commitIndex, rf.lastApplied)
+	return s
+}
+
 // Log Entry
 type LogEntry struct {
 	Command interface{}
@@ -290,7 +296,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.LogLock(LogRVRev, "%d<--%d  %v", rf.getMe(), args.CandidateId, args)
 	rf.mu.Lock()
 	//defer这里顺序错会出问题
-	defer rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), args.CandidateId, reply)
+	defer func() {
+		//避免defer预计算参数
+		rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), args.CandidateId, reply)
+	}()
+
 	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
 	// Your code here (2A, 2B).
@@ -316,8 +326,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	//其他情况可能同意
 	if oldTerm < args.Term {
 		rf.votedFor = args.CandidateId
-		rf.state = Follower
+		rf.state = Follower //老的leader收到新投票的请求应该变成follower
 		reply.VoteGranted = true
+		rf.Log(LogRVBody, "%v", rf)
 	} else if oldTerm == args.Term && (rf.votedFor == -1 || rf.votedFor == args.CandidateId) { //或者还没投或者已经投给他了
 		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
@@ -332,7 +343,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.LogLock(LogAERev, "%d<--%d  %v", rf.getMe(), args.LeaderId, args)
 	rf.mu.Lock()
 	//defer这里顺序错会出问题
-	defer rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), args.LeaderId, reply)
+	defer func() {
+		//避免defer预计算参数
+		rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), args.LeaderId, reply)
+	}()
 	defer rf.mu.Unlock()
 	reply.Success = true
 	reply.Term = rf.currentTerm
@@ -345,7 +359,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.Success = false
 		return
 	} else { //eq discovers current leader
-		rf.state = Follower
+		//TODO: rf.state = Follower
 	}
 
 	if args.LeaderCommit > rf.commitIndex {
@@ -400,7 +414,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	rf.LogLock(LogRVSend, "%d-->%d  %v", rf.getMe(), server, args)
-	defer rf.LogLock(LogRVRev, "%d<--%d  %v term为(%d)发出", rf.getMe(), server, reply, args.Term)
+	defer func() {
+		rf.LogLock(LogRVRev, "%d<--%d  %v term为(%d)发出", rf.getMe(), server, reply, args.Term)
+	}()
 
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
@@ -408,7 +424,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	rf.LogLock(LogAESend, "%d-->%d  %v", rf.getMe(), server, args)
-	defer rf.LogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, reply)
+	defer func() {
+		rf.LogLock(LogAERev, "%d<--%d  %v", rf.getMe(), server, reply)
+	}()
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
@@ -598,7 +616,7 @@ func (rf *Raft) ticker() {
 						if ret {
 							countAllReply++
 							if reply.VoteGranted {
-								countVote++ //这里有没有可能加到下次循环的countAllReply上面
+								countVote++ //TODO:这里有没有可能加到下次大循环的countAllReply上面
 							}
 							if reply.Term > rf.currentTerm { //discover server with highter term
 								rf.state = Follower
@@ -670,7 +688,7 @@ func (rf *Raft) LogLock(lt LogType, format string, a ...interface{}) {
 }
 
 func (rf *Raft) Log(lt LogType, format string, a ...interface{}) {
-	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) ", rf.getMe(), "Unknown", lt)
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d) ", rf.getMe(), rf.state, lt, rf.currentTerm)
 	DPrintf(lt, perfix, format, a...)
 }
 

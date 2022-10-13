@@ -16,6 +16,7 @@ var logMu sync.Mutex
 type LogType uint64
 
 const (
+	LogAll         LogType = 0xffffffffffffffff
 	LogAESend      LogType = 1
 	LogAERev       LogType = 1 << 1
 	LogRVSend      LogType = 1 << 2
@@ -23,11 +24,12 @@ const (
 	LogElec        LogType = 1 << 4
 	LogHeartBeat   LogType = 1 << 5
 	LogStateChange LogType = 1 << 6
+	LogRVBody      LogType = 1 << 7
 )
 
-const LogAll = LogAESend | LogAERev | LogRVSend | LogRVRev | LogElec | LogHeartBeat | LogStateChange
-
-const LogEAH = LogElec | LogHeartBeat | LogRVRev | LogRVSend | LogAESend | LogAERev
+const (
+	LogEAH LogType = LogElec | LogHeartBeat | LogRVRev | LogRVSend | LogAESend | LogAERev | LogRVBody
+)
 
 var LStoStr = map[LogType]string{
 	LogAESend:      "LogAESend",
@@ -38,6 +40,7 @@ var LStoStr = map[LogType]string{
 	LogHeartBeat:   "LogHeartBeat",
 	LogStateChange: "LogStateChange",
 	LogAll:         "LogAll",
+	LogRVBody:      "LogRVBody",
 }
 
 func (ls LogType) String() string {
