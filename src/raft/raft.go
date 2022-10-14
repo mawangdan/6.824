@@ -575,7 +575,7 @@ func (rf *Raft) LogReplication(index int) {
 
 					args.Term = rf.currentTerm
 					for eIndex := rf.nextIndex[server]; eIndex <= rf.getLastLogIndex(); eIndex++ {
-						args.Entries = append(args.Entries, rf.getLastLog())
+						args.Entries = append(args.Entries, rf.log[eIndex])
 					}
 					rf.mu.Unlock()
 					ok := rf.sendAppendEntries(server, args, reply)
