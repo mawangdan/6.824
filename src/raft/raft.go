@@ -453,7 +453,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	seq := getRpcn()
 	args.Seq = seq
-	rf.pLogLock(LogAESend, "%d-->%d  %v", rf.getMe(), server, args)
+	rf.mu.Lock()
+	rf.pLog(LogAESend, "%d-->%d  %v %v", rf.getMe(), server, args, rf)
+	rf.mu.Unlock()
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	defer func() {
 		if ok {
