@@ -52,6 +52,49 @@ var LStoStr = map[LogType]string{
 	LogStateChange: "LogStateChange",
 	LogAll:         "LogAll",
 	LogRVBody:      "LogRVBody",
+	LogRP:          "LogRP",
+	LogAEBody:      "LogAEBody",
+	LogApply:       "LogApply",
+}
+
+// 前景 背景 颜色
+// ---------------------------------------
+// 30  40  黑色
+// 31  41  红色
+// 32  42  绿色
+// 33  43  黄色
+// 34  44  蓝色
+// 35  45  紫红色
+// 36  46  青蓝色
+// 37  47  白色
+//
+// 代码 意义
+// -------------------------
+//  0  终端默认设置
+//  1  高亮显示
+//  4  使用下划线
+//  5  闪烁
+//  7  反白显示
+//  8  不可见
+type Color int
+
+const (
+	Black     Color = 30
+	Red       Color = 31
+	Green     Color = 32
+	Yellow    Color = 33
+	Blue      Color = 34
+	Purple    Color = 35
+	GreenBlue Color = 36
+	White     Color = 37
+)
+
+func SetColor(c Color, msg string) string {
+	conf := 0    // 配置、终端默认设置
+	bg := 0      // 背景色、终端默认设置
+	var text int // 前景色
+	text = int(c)
+	return fmt.Sprintf("%c[%d;%d;%dm%s%c[0m", 0x1B, conf, bg, text, msg, 0x1B)
 }
 
 func (ls LogType) String() string {
