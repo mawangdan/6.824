@@ -376,10 +376,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.state = Follower
 		rf.lastHeartBeatTime = time.Now().UnixNano()
 	}
-
-	if args.LeaderCommit > rf.commitIndex {
-		rf.commitIndex = min(args.LeaderCommit, rf.getLastLogIndex())
-	}
+	// 	If leaderCommit > commitIndex, set commitIndex =
+	// min(leaderCommit, index of last new entry)
+	//如果index of last new entry理解为rf.getLastLogIndex()
+	// 果然这里有问题:如果心跳包收到一个大的cmtIndex,而自己的log还是旧的还没和leader形成共识
+	//论文放在LR(AE)的最后一步没看清楚
+	// if args.LeaderCommit > rf.commitIndex {
+	// 	rf.setCommitIndex(min(args.LeaderCommit, rf.getLastLogIndex()))
+	// }
 
 	//TODO:
 	// 	If commitIndex > lastApplied: increment lastApplied, apply
@@ -394,7 +398,29 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		//TODO:other cases
 
 		//TODO:Reply false if log doesn’t contain an entry at prevLogIndex
-		// whose term matches prevLogTerm (§5.3)
+		// whose(That Entry) term matches prevLogTerm (§5.3)
+		if rf.getLastLogIndex() < args.PrevLogIndex ||
+			rf.log[args.PrevLogIndex].Term != args.PrevLogTerm { //
+			reply.Success = false
+			return
+		} else { //前面的没有矛盾了
+			// If an existing entry conflicts with a new one (same index
+			// 	but different terms), delete the existing entry and all that
+			// 	follow it (§5.3)
+			//TODO:首先处理后面的矛盾
+			//子切片左闭右开
+			rf.log = rf.log[0 : args.PrevLogIndex+1]
+			//直接接上去
+			rf.log = append(rf.log, args.Entries...)
+			reply.Success = true
+			rf.pLog(LogAEBody, "%v", rf)
+			//论文的第五步
+			// 	If leaderCommit > commitIndex, set commitIndex =
+			// min(leaderCommit, index of last new entry)
+			if args.LeaderCommit > rf.commitIndex {
+				rf.setCommitIndex(min(args.LeaderCommit, rf.getLastLogIndex()))
+			}
+		}
 	}
 }
 
