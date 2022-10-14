@@ -533,6 +533,13 @@ func (rf *Raft) commitIndexChange(c int) {
 	if c > rf.commitIndex {
 		rf.commitIndex = c
 	}
+	la := rf.lastApplied
+	for i := la + 1; i <= rf.commitIndex; i++ {
+		rf.pLog(LogApply, "send apply %v", rf.log[i])
+		rf.lastApplied = i
+		rf.applyCh <- ApplyMsg{true, rf.log[i].Command, i, false, nil, -1, -1}
+		rf.pLog(LogApply, "finish apply %v", rf.log[i])
+	}
 }
 
 func (rf *Raft) LogReplication(index int) {
