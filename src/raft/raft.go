@@ -389,6 +389,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// 	If commitIndex > lastApplied: increment lastApplied, apply
 	// 	log[lastApplied] to state machine (§5.3)
 	//	无论是不是心跳包，都需要apply
+	//这里在setCmt这个里面hook了
+	//论文的第五步
+	// 	If leaderCommit > commitIndex, set commitIndex =
+	// min(leaderCommit, index of last new entry)
+	//上面代码不能在这里加，因为如果没和leader同步则不能提交
 
 	if args.Entries == nil { //heart beat
 		rf.lastHeartBeatTime = time.Now().UnixNano()
