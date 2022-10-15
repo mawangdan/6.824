@@ -553,6 +553,10 @@ func (rf *Raft) sendHeartBeat() {
 				state := rf.state
 				currentTerm := rf.currentTerm
 				commitIndex := rf.commitIndex
+				//这里的心跳包特殊处理,因为发过去的是空包无法replicate,所以只是试一下rf.nextIndex是不是没冲突
+				//如果可以的话那就不用再replicate了,如果不行那就要replicate
+				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), rf.nextIndex[server], rf.log[rf.nextIndex[server]].Term, nil, commitIndex}
+				reply := &AppendEntriesReply{}
 				rf.mu.Unlock()
 				//不是leader停止发心跳
 				if state != Leader {
