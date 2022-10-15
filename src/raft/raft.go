@@ -549,6 +549,16 @@ func (rf *Raft) sendHeartBeat() {
 				go func() {
 					rf.sendAppendEntries(server, args, reply)
 				}()
+
+				<-hbChan//等hb回复，超时或者失败也有回复
+				//两种情况，一种是term出问题，一种是perIdx冲突
+				//RPC里处理了情况1,情况二下面处理
+				rf.mu.Lock()
+				if reply.Success == false && rf.state == Leader {
+					go rf.LogReplicaToServer(server, nil, nil)
+				}
+				rf.mu.Unlock()
+				//ul
 				time.Sleep(BroadcastTime)
 			}
 		}()
