@@ -8,17 +8,6 @@ import (
 	"sync"
 )
 
-var rpcn = 1
-var rpcnMu sync.Mutex
-
-func getRpcn() int {
-	rpcnMu.Lock()
-	ret := rpcn
-	rpcn++
-	rpcnMu.Unlock()
-	return ret
-}
-
 // Debugging
 const Debug = true
 
@@ -36,11 +25,16 @@ const (
 	LogHeartBeat   LogType = 1 << 5
 	LogStateChange LogType = 1 << 6
 	LogRVBody      LogType = 1 << 7
+	LogRP          LogType = 1 << 8
+	LogAEBody      LogType = 1 << 9
+	LogApply       LogType = 1 << 10
 )
 
 const (
-	LogEAH LogType = LogElec | LogHeartBeat | LogRVRev | LogRVSend | LogAESend | LogAERev | LogRVBody
+	LogEAH LogType = LogRVRev | LogRVSend | LogAESend | LogAERev | LogRVBody | LogAEBody | LogRP | LogApply
 )
+
+const LogSwitch LogType = LogEAH
 
 var LStoStr = map[LogType]string{
 	LogAESend:      "LogAESend",
@@ -89,12 +83,15 @@ const (
 	White     Color = 37
 )
 
+//First arg  Color: Black  Red  Green   Yellow  Blue   Purple   GreenBlue  White
+//Second arg  msg
 func SetColor(c Color, msg string) string {
-	conf := 0    // 配置、终端默认设置
-	bg := 0      // 背景色、终端默认设置
-	var text int // 前景色
-	text = int(c)
-	return fmt.Sprintf("%c[%d;%d;%dm%s%c[0m", 0x1B, conf, bg, text, msg, 0x1B)
+	// conf := 0    // 配置、终端默认设置
+	// bg := 0      // 背景色、终端默认设置
+	// var text int // 前景色
+	// text = int(c)
+	//return fmt.Sprintf("%c[%d;%d;%dm%s%c[0m", 0x1B, conf, bg, text, msg, 0x1B)
+	return msg
 }
 
 func (ls LogType) String() string {
@@ -102,7 +99,7 @@ func (ls LogType) String() string {
 }
 func DPrintf(lt LogType, perfix string, format string, a ...interface{}) (n int, err error) {
 	if Debug {
-		if lt&LogEAH != 0 {
+		if lt&LogSwitch != 0 {
 
 			//哈哈!从log的源码复制过来的
 			_, file, line, ok := runtime.Caller(2)
@@ -162,4 +159,15 @@ func i64Toint(i64 int64) int {
 	str := strconv.FormatInt(i64, 10)
 	i, _ := strconv.Atoi(str)
 	return i
+}
+
+var rpcn = 1
+var rpcnMu sync.Mutex
+
+func getRpcn() int {
+	rpcnMu.Lock()
+	ret := rpcn
+	rpcn++
+	rpcnMu.Unlock()
+	return ret
 }
