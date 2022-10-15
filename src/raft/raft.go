@@ -393,6 +393,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.Entries == nil { //heart beat
 		rf.lastHeartBeatTime = time.Now().UnixNano()
 		rf.leaderId = args.LeaderId
+		rf.pLog(LogHeartBeat, "%d %d %v", args.Seq, args.PrevLogIndex, rf) //TODO:remove
+		if rf.getLastLogIndex() < args.PrevLogIndex ||
+			rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			//冲突需要让心跳包开启LR
+			reply.Success = false
+		} else {
+			//没有冲突
+			if args.LeaderCommit > rf.commitIndex {
+				rf.setCommitIndex(min(args.LeaderCommit, rf.getLastLogIndex()))
+			}
+		}
 		return
 	} else { //否则是正常报文
 		//TODO:other cases
@@ -414,9 +425,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			rf.log = append(rf.log, args.Entries...)
 			reply.Success = true
 			rf.pLog(LogAEBody, "%v", rf)
-			//论文的第五步
-			// 	If leaderCommit > commitIndex, set commitIndex =
-			// min(leaderCommit, index of last new entry)
+			//没有冲突了
 			if args.LeaderCommit > rf.commitIndex {
 				rf.setCommitIndex(min(args.LeaderCommit, rf.getLastLogIndex()))
 			}
