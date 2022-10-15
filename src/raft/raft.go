@@ -544,7 +544,7 @@ func (rf *Raft) sendHeartBeat() {
 				if state != Leader {
 					break
 				}
-				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), -1, -1, nil, commitIndex}
+				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), rf.nextIndex[server] - 1, rf.log[rf.nextIndex[server]-1].Term, nil, commitIndex}
 				reply := &AppendEntriesReply{}
 				go func() {
 					rf.sendAppendEntries(server, args, reply)
