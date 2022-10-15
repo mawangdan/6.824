@@ -547,17 +547,16 @@ func (rf *Raft) sendHeartBeat() {
 				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), rf.nextIndex[server] - 1, rf.log[rf.nextIndex[server]-1].Term, nil, commitIndex}
 				reply := &AppendEntriesReply{}
 				go func() {
-					rf.sendAppendEntries(server, args, reply)
+					rf.sendHeartBeatEntries(server, args, reply)
+					//两种情况，一种是term出问题，一种是perIdx冲突
+					//RPC里处理了情况1,情况二下面处理
+					rf.mu.Lock()
+					if reply.Success == false && rf.state == Leader {
+						go rf.LogReplicaToServer(server, nil, nil)
+					}
+					rf.mu.Unlock()
 				}()
 
-				<-hbChan//等hb回复，超时或者失败也有回复
-				//两种情况，一种是term出问题，一种是perIdx冲突
-				//RPC里处理了情况1,情况二下面处理
-				rf.mu.Lock()
-				if reply.Success == false && rf.state == Leader {
-					go rf.LogReplicaToServer(server, nil, nil)
-				}
-				rf.mu.Unlock()
 				//ul
 				time.Sleep(BroadcastTime)
 			}
