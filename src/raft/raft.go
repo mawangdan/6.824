@@ -443,8 +443,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			reply.ConflictTerm = rf.log[args.PrevLogIndex].Term
 			reply.FirstIndexForThatTerm = args.PrevLogIndex
 			idx := reply.FirstIndexForThatTerm
-			for ; idx >= 0; idx-- {
-				if rf.log[idx].Term == reply.ConflictTerm {
+			//0是特殊log不会有冲突
+			for ; idx > 0; idx-- {
+				if rf.Log[idx].Term == reply.ConflictTerm {
 					reply.FirstIndexForThatTerm = idx
 				}
 			}
@@ -627,6 +628,9 @@ func (rf *Raft) sendHeartBeat() {
 					//RPC里处理了情况1,情况二下面处理
 					rf.mu.Lock()
 					if reply.Success == false && rf.state == Leader {
+						//冲突之后说明需要调整nextIndex,不然下面的LogReplicaToServer的Log会是空，被当成HB
+						//这里有大bug,nextIndex并不是心跳联系的nextInedx,因为可能被别的RP修改了
+						rf.nextIndex[server] = HBpreIdx - 1
 						go rf.LogReplicaToServer(server, nil, nil)
 					}
 					rf.mu.Unlock()
@@ -727,7 +731,8 @@ func (rf *Raft) LogReplicaToServer(server int, waitChn chan bool, cntReplicated 
 				// After a rejection, the leader decrements nextIndex and retries
 				// the AppendEntries RPC. Eventually nextIndex will reach
 				// a point where the leader and follower logs match.
-				nextIdx := rf.nextIndex[server] - 1
+				//这里不能用nextIndex[server]因为可能不是原来那个server了
+				nextIdx := args.PrevLogIndex
 				for ; nextIdx >= 0 && nextIdx >= reply.FirstIndexForThatTerm; nextIdx-- {
 					if rf.log[nextIdx].Term != reply.ConflictTerm {
 						rf.nextIndex[server] = nextIdx
