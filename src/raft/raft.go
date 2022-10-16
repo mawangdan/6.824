@@ -195,6 +195,11 @@ type AppendEntriesReply struct {
 	Term    int  //currentTerm, for leader to update itself
 	Success bool //true if follower contained entry matching prevLogIndex and prevLogTerm
 
+	// 	With this information, the
+	// leader can decrement nextIndex to bypass all of the con-
+	// flicting entries in that term;
+	ConflictTerm          int
+	FirstIndexForThatTerm int
 }
 
 func (aer *AppendEntriesReply) String() string {
@@ -428,9 +433,21 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 		//TODO:Reply false if log doesn’t contain an entry at prevLogIndex
 		// whose(That Entry) term matches prevLogTerm (§5.3)
-		if rf.getLastLogIndex() < args.PrevLogIndex ||
-			rf.log[args.PrevLogIndex].Term != args.PrevLogTerm { //
+		if rf.getLastLogIndex() < args.PrevLogIndex { //
 			reply.Success = false
+			reply.ConflictTerm = -1
+			reply.FirstIndexForThatTerm = rf.getLastLogIndex() + 1
+			return
+		} else if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			reply.Success = false
+			reply.ConflictTerm = rf.log[args.PrevLogIndex].Term
+			reply.FirstIndexForThatTerm = args.PrevLogIndex
+			idx := reply.FirstIndexForThatTerm
+			for ; idx >= 0; idx-- {
+				if rf.log[idx].Term == reply.ConflictTerm {
+					reply.FirstIndexForThatTerm = idx
+				}
+			}
 			return
 		} else { //前面的没有矛盾了
 			// If an existing entry conflicts with a new one (same index
@@ -710,7 +727,12 @@ func (rf *Raft) LogReplicaToServer(server int, waitChn chan bool, cntReplicated 
 				// After a rejection, the leader decrements nextIndex and retries
 				// the AppendEntries RPC. Eventually nextIndex will reach
 				// a point where the leader and follower logs match.
-				rf.nextIndex[server]--
+				nextIdx := rf.nextIndex[server] - 1
+				for ; nextIdx >= 0 && nextIdx >= reply.FirstIndexForThatTerm; nextIdx-- {
+					if rf.log[nextIdx].Term != reply.ConflictTerm {
+						rf.nextIndex[server] = nextIdx
+					}
+				}
 			}
 		}
 		rf.mu.Unlock()
