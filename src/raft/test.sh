@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bk = "FAIL"
+bk="FAIL"
 ts="PASS"
 i=1
 while true
