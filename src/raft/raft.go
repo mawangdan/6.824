@@ -19,6 +19,7 @@ package raft
 
 import (
 	//	"bytes"
+	"bytes"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -28,6 +29,7 @@ import (
 	"time"
 
 	//	"6.824/labgob"
+	"6.824/labgob"
 	"6.824/labrpc"
 )
 
@@ -98,7 +100,8 @@ type ApplyMsg struct {
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
-	mu                sync.Mutex          // Lock to protect shared access to this peer's state
+	mu                sync.Mutex // Lock to protect shared access to this peer's state
+	lpmuA             []sync.Mutex
 	peers             []*labrpc.ClientEnd // RPC end points of all peers
 	persister         *Persister          // Object to hold this peer's persisted state
 	me                int64               // this peer's index into peers[]
@@ -117,9 +120,9 @@ type Raft struct {
 	clusterState ClusterState
 
 	//persistent state
-	currentTerm int
-	votedFor    int //candidateId that received vote in current term (or null if none)
-	log         LogEntries
+	CurrentTerm int
+	VotedFor    int //candidateId that received vote in current term (or null if none)
+	Log         LogEntries
 
 	//volatile state
 	commitIndex int
@@ -135,7 +138,7 @@ type Raft struct {
 
 //need lock
 func (rf *Raft) String() string {
-	s := fmt.Sprintf("%s{currentTerm: %d,votedFor: %d,commitIndex: %d,lastApplied: %d,log: %v}", SetColor(Purple, "Raft"), rf.currentTerm, rf.votedFor, rf.commitIndex, rf.lastApplied, rf.log)
+	s := fmt.Sprintf("%s{currentTerm: %d,votedFor: %d,commitIndex: %d,lastApplied: %d,log: %v}", SetColor(Purple, "Raft"), rf.CurrentTerm, rf.VotedFor, rf.commitIndex, rf.lastApplied, rf.Log)
 	return s
 }
 
@@ -203,7 +206,7 @@ type AppendEntriesReply struct {
 }
 
 func (aer *AppendEntriesReply) String() string {
-	s := fmt.Sprintf("%s{Seq :%d,Term :%d,Success :%t}", SetColor(Green, "AppendEntriesReply"), aer.Seq, aer.Term, aer.Success)
+	s := fmt.Sprintf("%s{Seq :%d,Term :%d,Success :%t,ConflictTerm: %d,FirstIndexForThatTerm: %d}", "AppendEntriesReply", aer.Seq, aer.Term, aer.Success, aer.ConflictTerm, aer.FirstIndexForThatTerm)
 	return s
 }
 
@@ -214,7 +217,7 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	rf.mu.Lock()
-	term = rf.currentTerm
+	term = rf.CurrentTerm
 	isleader = rf.state == Leader
 	rf.mu.Unlock()
 	// Your code here (2A).
@@ -235,6 +238,15 @@ func (rf *Raft) persist() {
 	// e.Encode(rf.yyy)
 	// data := w.Bytes()
 	// rf.persister.SaveRaftState(data)
+
+	buffer := new(bytes.Buffer)
+	e := labgob.NewEncoder(buffer)
+	e.Encode(rf.CurrentTerm)
+	e.Encode(rf.VotedFor)
+	e.Encode(rf.Log)
+	data := buffer.Bytes()
+	rf.persister.SaveRaftState(data)
+
 }
 
 //
@@ -246,17 +258,20 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	buffer := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(buffer)
+	var currentTerm int
+	var votedFor int
+	var log LogEntries
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&log) != nil {
+		rf.pLog(LogPersis, "序列化转对象失败")
+	} else {
+		rf.Log = log
+		rf.CurrentTerm = currentTerm
+		rf.VotedFor = votedFor
+	}
 }
 
 //
@@ -326,15 +341,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	defer func() {
 		rf.pLog(LogRVSend, "%d-->%d  %v", rf.getMe(), args.CandidateId, reply)
 	}()
-	reply.Term = rf.currentTerm
+	reply.Term = rf.CurrentTerm
 	// Your code here (2A, 2B).
-	if rf.currentTerm > args.Term {
+	if rf.CurrentTerm > args.Term {
 		reply.VoteGranted = false
 		return
 	}
 
-	oldTerm := rf.currentTerm
-	rf.currentTerm = args.Term
+	oldTerm := rf.CurrentTerm
+	rf.CurrentTerm = args.Term
 
 	//Election restriction
 	// the
@@ -350,12 +365,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	//其他情况可能同意
 	if oldTerm < args.Term {
-		rf.votedFor = args.CandidateId
+		rf.VotedFor = args.CandidateId
 		rf.state = Follower //老的leader收到新投票的请求应该变成follower
 		reply.VoteGranted = true
 		rf.pLog(LogRVBody, "%v", rf)
-	} else if oldTerm == args.Term && (rf.votedFor == -1 || rf.votedFor == args.CandidateId) { //或者还没投或者已经投给他了
-		rf.votedFor = args.CandidateId
+	} else if oldTerm == args.Term && (rf.VotedFor == -1 || rf.VotedFor == args.CandidateId) { //或者还没投或者已经投给他了
+		rf.VotedFor = args.CandidateId
 		reply.VoteGranted = true
 	} else { //否则不投给他
 		reply.VoteGranted = false
@@ -369,9 +384,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	LogFlag := LogAERev
-	if args.Entries == nil {
-		LogFlag = LogHeartBeat
-	}
+	// if args.Entries == nil {
+	// 	LogFlag = LogHeartBeat
+	// }
 
 	rf.pLog(LogFlag, "%d<--%d  %v", rf.getMe(), args.LeaderId, args)
 	//defer这里顺序错会出问题
@@ -381,13 +396,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}()
 
 	reply.Success = true
-	reply.Term = rf.currentTerm
+	reply.Term = rf.CurrentTerm
 	// 	If RPC request or response contains term T > currentTerm:
 	// set currentTerm = T, convert to follower
-	if rf.currentTerm < args.Term {
-		rf.currentTerm = args.Term
+	if rf.CurrentTerm < args.Term {
+		rf.CurrentTerm = args.Term
 		rf.state = Follower
-	} else if rf.currentTerm > args.Term {
+	} else if rf.CurrentTerm > args.Term {
 		reply.Success = false
 		return
 	} else { //eq discovers current leader
@@ -417,14 +432,23 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.lastHeartBeatTime = time.Now().UnixNano()
 		rf.leaderId = args.LeaderId
 		rf.pLog(LogHeartBeat, "%d %d %v", args.Seq, args.PrevLogIndex, rf) //TODO:remove
-		if rf.getLastLogIndex() < args.PrevLogIndex ||
-			rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+		if rf.getLastLogIndex() < args.PrevLogIndex {
+			reply.Success = false
+			reply.ConflictTerm = -1
+			reply.FirstIndexForThatTerm = args.PrevLogIndex
+			return
+		} else if rf.Log[args.PrevLogIndex].Term != args.PrevLogTerm {
 			//冲突需要让心跳包开启LR
+			reply.ConflictTerm = rf.Log[args.PrevLogIndex].Term
+			reply.FirstIndexForThatTerm = args.PrevLogIndex
 			reply.Success = false
 		} else {
 			//没有冲突,只是证明前面的没冲突,现在这个位置未知,但是由于心跳包是空的,Leader发的pre其实是特殊的
 			if args.LeaderCommit > rf.commitIndex {
-				rf.setCommitIndex(min(args.LeaderCommit, rf.getLastLogIndex()))
+				rf.pLog(LogRP, "心跳包说没冲突 %v %v", rf, args)
+				//bug
+				rf.setCommitIndex(min(args.LeaderCommit, args.PrevLogIndex))
+				rf.pLog(LogFlag, "%d-->%d  %v", rf.getMe(), args.LeaderId, reply)
 			}
 		}
 		return
@@ -438,9 +462,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			reply.ConflictTerm = -1
 			reply.FirstIndexForThatTerm = rf.getLastLogIndex() + 1
 			return
-		} else if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+		} else if rf.Log[args.PrevLogIndex].Term != args.PrevLogTerm {
 			reply.Success = false
-			reply.ConflictTerm = rf.log[args.PrevLogIndex].Term
+			reply.ConflictTerm = rf.Log[args.PrevLogIndex].Term
 			reply.FirstIndexForThatTerm = args.PrevLogIndex
 			idx := reply.FirstIndexForThatTerm
 			//0是特殊log不会有冲突
@@ -456,13 +480,15 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			// 	follow it (§5.3)
 			//TODO:首先处理后面的矛盾
 			//子切片左闭右开
-			rf.log = rf.log[0 : args.PrevLogIndex+1]
+			rf.Log = rf.Log[0 : args.PrevLogIndex+1]
 			//直接接上去
-			rf.log = append(rf.log, args.Entries...)
+			rf.Log = append(rf.Log, args.Entries...)
 			reply.Success = true
 			rf.pLog(LogAEBody, "%v", rf)
+			rf.persist()
 			//没有冲突了
 			if args.LeaderCommit > rf.commitIndex {
+				rf.pLog(LogRP, "RP说没冲突 %v %v", rf, args)
 				rf.setCommitIndex(min(args.LeaderCommit, rf.getLastLogIndex()))
 			}
 		}
@@ -508,9 +534,9 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 		if ok {
 			rf.mu.Lock()
 			rf.pLog(LogRVRev, "%d<--%d  %v", rf.getMe(), server, reply)
-			if reply.Term > rf.currentTerm { //discover server with highter term
+			if reply.Term > rf.CurrentTerm { //discover server with highter term
 				rf.state = Follower
-				rf.currentTerm = reply.Term
+				rf.CurrentTerm = reply.Term
 			}
 			rf.mu.Unlock()
 		} else {
@@ -532,8 +558,8 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 		if ok {
 			rf.mu.Lock()
 			rf.pLog(LogAERev, "%d<--%d  %v %v", rf.getMe(), server, reply, rf)
-			if reply.Success == false && reply.Term > rf.currentTerm {
-				rf.currentTerm = reply.Term
+			if reply.Success == false && reply.Term > rf.CurrentTerm {
+				rf.CurrentTerm = reply.Term
 				rf.state = Follower
 			}
 			rf.mu.Unlock()
@@ -555,8 +581,8 @@ func (rf *Raft) sendHeartBeatEntries(server int, args *AppendEntriesArgs, reply 
 		if ok {
 			rf.mu.Lock()
 			rf.pLog(LogHeartBeat, "%d<--%d  %v", rf.getMe(), server, reply)
-			if reply.Success == false && reply.Term > rf.currentTerm {
-				rf.currentTerm = reply.Term
+			if reply.Success == false && reply.Term > rf.CurrentTerm {
+				rf.CurrentTerm = reply.Term
 				rf.state = Follower
 			}
 			rf.mu.Unlock()
@@ -605,33 +631,41 @@ func (rf *Raft) sendHeartBeat() {
 
 				rf.mu.Lock()
 				state := rf.state
-				currentTerm := rf.currentTerm
-				commitIndex := rf.commitIndex
+				currentTerm := rf.CurrentTerm
 				//这里的心跳包特殊处理,因为发过去的是空包无法replicate,所以只是试一下rf.nextIndex是不是没冲突
 				//如果可以的话那就不用再replicate了,如果不行那就要replicate
-
 				//如果next已经超过了当前log,就不需要同步了,那就需要--
 				HBpreIdx := rf.nextIndex[server]
+
+				commitIndex := rf.commitIndex
 				if HBpreIdx > rf.getLastLogIndex() {
 					HBpreIdx = rf.getLastLogIndex()
 				}
-				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), HBpreIdx, rf.log[HBpreIdx].Term, nil, commitIndex}
+				args := &AppendEntriesArgs{-1, currentTerm, rf.getMe(), HBpreIdx, rf.Log[HBpreIdx].Term, nil, commitIndex}
 				reply := &AppendEntriesReply{}
+				if HBpreIdx == 0 {
+					rf.pLog(LogRP, "%v %v", rf, args)
+				}
 				rf.mu.Unlock()
 				//不是leader停止发心跳
 				if state != Leader {
 					break
 				}
 				go func() {
-					rf.sendHeartBeatEntries(server, args, reply)
+					ok := rf.sendHeartBeatEntries(server, args, reply)
 					//两种情况，一种是term出问题，一种是perIdx冲突
 					//RPC里处理了情况1,情况二下面处理
 					rf.mu.Lock()
-					if reply.Success == false && rf.state == Leader {
+					if ok && reply.Success == false && rf.state == Leader {
 						//冲突之后说明需要调整nextIndex,不然下面的LogReplicaToServer的Log会是空，被当成HB
 						//这里有大bug,nextIndex并不是心跳联系的nextInedx,因为可能被别的RP修改了
-						rf.nextIndex[server] = HBpreIdx - 1
+						rf.nextIndex[server] = HBpreIdx
+						if rf.nextIndex[server] == 0 {
+							rf.pLog(LogRP, " nextIndex[server] == 0 %v %v", rf, reply)
+						}
 						go rf.LogReplicaToServer(server, nil, nil)
+					} else if ok && reply.Success {
+						rf.nextIndex[server] = HBpreIdx + 1
 					}
 					rf.mu.Unlock()
 				}()
@@ -651,10 +685,10 @@ func (rf *Raft) setCommitIndex(c int) {
 	}
 	la := rf.lastApplied
 	for i := la + 1; i <= rf.commitIndex; i++ {
-		rf.pLog(LogApply, "send apply %v %v", rf.log[i], rf)
+		rf.pLog(LogApply, "send apply %v %v", rf.Log[i], rf)
 		rf.lastApplied = i
-		rf.applyCh <- ApplyMsg{true, rf.log[i].Command, i, false, nil, -1, -1}
-		rf.pLog(LogApply, "finish apply %v %v", rf.log[i], rf)
+		rf.applyCh <- ApplyMsg{true, rf.Log[i].Command, i, false, nil, -1, -1}
+		rf.pLog(LogApply, "finish apply %v %v", rf.Log[i], rf)
 	}
 }
 
@@ -677,7 +711,7 @@ func (rf *Raft) searchNandSetCmit() {
 	for i := 0; i < l; i++ {
 		//满足majority
 		if l-i >= rf.majority {
-			if matchIndexCopy[i] > rf.commitIndex && rf.log[matchIndexCopy[i]].Term == rf.currentTerm {
+			if matchIndexCopy[i] > rf.commitIndex && rf.Log[matchIndexCopy[i]].Term == rf.CurrentTerm {
 				N = matchIndexCopy[i] //N越大越好
 			}
 		} else {
@@ -685,7 +719,11 @@ func (rf *Raft) searchNandSetCmit() {
 		}
 	}
 	if N != -1 {
-		rf.setCommitIndex(N)
+		// Only log entries from the leader’s current
+		// term are committed by counting replicas;
+		if rf.Log[N].Term == rf.CurrentTerm {
+			rf.setCommitIndex(N)
+		}
 	}
 }
 
@@ -706,11 +744,17 @@ func (rf *Raft) LogReplicaToServer(server int, waitChn chan bool, cntReplicated 
 		args.LeaderCommit = rf.commitIndex
 		args.LeaderId = rf.getMe()
 		args.PrevLogIndex = rf.nextIndex[server] - 1
-		args.PrevLogTerm = rf.log[args.PrevLogIndex].Term
+		if args.PrevLogIndex == -1 {
+			rf.pLog(LogRP, " args.PrevLogIndex == -1  %v %d", rf, rf.nextIndex[server])
+		}
+		args.PrevLogTerm = rf.Log[args.PrevLogIndex].Term
 
-		args.Term = rf.currentTerm
+		args.Term = rf.CurrentTerm
 		for eIndex := rf.nextIndex[server]; eIndex <= rf.getLastLogIndex(); eIndex++ {
-			args.Entries = append(args.Entries, rf.log[eIndex])
+			args.Entries = append(args.Entries, rf.Log[eIndex])
+		}
+		if args.Entries == nil {
+			rf.pLog(LogRP, "%v %v", rf, args)
 		}
 		rf.mu.Unlock()
 		ok := rf.sendAppendEntries(server, args, reply)
@@ -734,9 +778,12 @@ func (rf *Raft) LogReplicaToServer(server int, waitChn chan bool, cntReplicated 
 				//这里不能用nextIndex[server]因为可能不是原来那个server了
 				nextIdx := args.PrevLogIndex
 				for ; nextIdx >= 0 && nextIdx >= reply.FirstIndexForThatTerm; nextIdx-- {
-					if rf.log[nextIdx].Term != reply.ConflictTerm {
+					if rf.Log[nextIdx].Term != reply.ConflictTerm {
 						rf.nextIndex[server] = nextIdx
 					}
+				}
+				if rf.nextIndex[server] == 0 {
+					rf.pLog(LogRP, "%v ,%v", rf, reply)
 				}
 			}
 		}
@@ -796,7 +843,6 @@ func (rf *Raft) LogReplication(index int) {
 		if state == Leader && cntReplicated >= rf.majority {
 			rf.pLog(LogRP, "reach agreement %v", rf)
 			rf.searchNandSetCmit()
-			rf.setCommitIndex(index)
 			flag = true
 		}
 		rf.mu.Unlock()
@@ -837,8 +883,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		return index, term, isLeader
 	}
 	rf.mu.Lock()
-	term = rf.currentTerm
-	rf.log = append(rf.log, LogEntry{Command: command, Term: term})
+	term = rf.CurrentTerm
+	rf.Log = append(rf.Log, LogEntry{Command: command, Term: term})
+	rf.persist()
 	index = rf.getLastLogIndex()
 	rf.mu.Unlock()
 	go rf.LogReplication(index)
@@ -876,12 +923,12 @@ func (rf *Raft) getMe() int {
 
 //需要原子操作，否则可能越界
 func (rf *Raft) getLastLog() LogEntry {
-	lastLog := rf.log[len(rf.log)-1]
+	lastLog := rf.Log[len(rf.Log)-1]
 	return lastLog
 }
 
 func (rf *Raft) getLastLogIndex() int {
-	return len(rf.log) - 1
+	return len(rf.Log) - 1
 }
 
 // The ticker go routine starts a new election if this peer hasn't received
@@ -925,13 +972,13 @@ func (rf *Raft) ticker() {
 
 			rf.mu.Lock()
 			rf.pLog(LogElec, "开始选举")
-			rf.currentTerm++
+			rf.CurrentTerm++
 			rf.state = Candidate
 			//vote for itself,这个时候
 			//TODO:假设引入membership changes
 			//如果状态属于C_o,C_o_n则可以为自己投票
 			//如果C_n则需要知道自己是否属于new cluster
-			rf.votedFor = me
+			rf.VotedFor = me
 
 			//如果在ask vote的前中Candidate收到RPC而变成Follower,那么永远无法获得majority
 			//如果是过程中,要特殊处理，不然选举完会以为他是newterm的leader（因为前面oldterm的票会当成newterm的票）:
@@ -949,7 +996,7 @@ func (rf *Raft) ticker() {
 				index := i
 				if index != me {
 					lastLog := rf.getLastLog()
-					args := &RequestVoteArgs{-1, rf.currentTerm, me, len(rf.log) - 1, lastLog.Term}
+					args := &RequestVoteArgs{-1, rf.CurrentTerm, me, len(rf.Log) - 1, lastLog.Term}
 					reply := &RequestVoteReply{}
 					go func() {
 						ret := rf.sendRequestVote(index, args, reply)
@@ -1008,7 +1055,7 @@ func (rf *Raft) ticker() {
 					rf.sendHeartBeat()
 					rf.mu.Lock()
 					rf.lastHeartBeatTime = time.Now().UnixNano()
-					retstr = "选举成功 Term(" + strconv.Itoa(rf.currentTerm) + ")"
+					retstr = "选举成功 Term(" + strconv.Itoa(rf.CurrentTerm) + ")"
 					// When a leader first comes to power,
 					// it initializes all nextIndex values to the index just after the
 					// last one in its log (11 in Figure 7).
@@ -1038,7 +1085,7 @@ func (rf *Raft) ticker() {
 func (rf *Raft) pLogLock(lt LogType, format string, a ...interface{}) {
 	rf.mu.Lock()
 	state := rf.state
-	term := rf.currentTerm
+	term := rf.CurrentTerm
 	rf.mu.Unlock()
 	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d) ", rf.getMe(), state, lt, term)
 	DPrintf(lt, perfix, format, a...)
@@ -1046,7 +1093,7 @@ func (rf *Raft) pLogLock(lt LogType, format string, a ...interface{}) {
 
 //需要加rf锁
 func (rf *Raft) pLog(lt LogType, format string, a ...interface{}) {
-	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d) ", rf.getMe(), rf.state, lt, rf.currentTerm)
+	perfix := fmt.Sprintf(" Peer(%d) State(%v) LogType(%v) Term(%d) ", rf.getMe(), rf.state, lt, rf.CurrentTerm)
 	DPrintf(lt, perfix, format, a...)
 }
 
@@ -1071,9 +1118,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Your initialization code here (2A, 2B, 2C).
 	rf.peerNumber = len(peers)
 	rf.majority = (rf.peerNumber / 2) + 1
-	rf.currentTerm = 0
-	rf.votedFor = -1
-	rf.log = append(rf.log, LogEntry{nil, 0}) //让第一个log下标为1
+	rf.CurrentTerm = 0
+	rf.VotedFor = -1
+	rf.Log = append(rf.Log, LogEntry{nil, 0}) //让第一个log下标为1
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.state = Follower
@@ -1083,6 +1130,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	for i := 0; i < rf.peerNumber; i++ {
 		rf.matchIndex = append(rf.matchIndex, -1)
 		rf.nextIndex = append(rf.nextIndex, 1)
+		rf.lpmuA = append(rf.lpmuA, sync.Mutex{})
 	}
 
 	// initialize from state persisted before a crash
